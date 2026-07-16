@@ -1,0 +1,207 @@
+// src/services/leadService.ts
+
+import api from "../api/axios";
+import type {
+  LeadSource,
+  LeadStatus,
+} from "../constants/leadConstants";
+
+// ─────────────────────────────────────────────────────────────
+// Types matching backend DTOs
+// ─────────────────────────────────────────────────────────────
+
+export interface LeadResponse {
+  id: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  product: string;
+  certificationType: string;
+  source: string;
+  status: string;
+  assignedToEmail: string;
+  createdAt?: string;
+  nextFollowUpDate?: string | null;
+}
+
+export interface CreateLeadRequest {
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  product: string;
+  certificationType: string;
+  source: LeadSource;
+  assignedToEmail: string;
+  nextFollowUpDate?: string | null;
+}
+
+export interface UpdateLeadRequest {
+  companyName?: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  product?: string;
+  certificationType?: string;
+  source?: string;
+  nextFollowUpDate?: string | null;
+  assignedToEmail?: string;
+}
+
+export interface LeadFilterParams {
+  status?: LeadStatus;
+  assignedToEmail?: string;
+  source?: string;
+  from?: string;
+  to?: string;
+  search?: string;
+  page?: number;
+  size?: number;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
+}
+
+export interface PagedLeads {
+  content: LeadResponse[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+
+export interface WonLeadRequest {
+  targetStatus: "WON";
+  amount: number;
+  expectedCloseDate: string;
+  notes: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// API FUNCTIONS
+// ─────────────────────────────────────────────────────────────
+
+// GET /api/leads/filter
+export const fetchLeads = async (
+  params: LeadFilterParams = {}
+): Promise<PagedLeads> => {
+  const res = await api.get<PagedLeads>(
+    "/leads/filter",
+    { params }
+  );
+
+  return res.data;
+};
+
+// GET /api/leads/total
+export const fetchTotalLeads = async (): Promise<number> => {
+  const res = await api.get<number>(
+    "/leads/total"
+  );
+
+  return res.data;
+};
+
+// GET /api/leads/get/{id}
+export const fetchLeadById = async (
+  id: string
+): Promise<LeadResponse> => {
+  const res = await api.get<LeadResponse>(
+    `/leads/get/${id}`
+  );
+
+  return res.data;
+};
+
+// POST /api/leads
+export const createLead = async (
+  data: CreateLeadRequest
+): Promise<LeadResponse> => {
+  const res = await api.post<LeadResponse>(
+    "/leads",
+    data
+  );
+
+  return res.data;
+};
+
+// PATCH /api/leads/update/{id}
+export const updateLead = async (
+  id: string,
+  data: UpdateLeadRequest
+): Promise<LeadResponse> => {
+  const res = await api.patch<LeadResponse>(
+    `/leads/update/${id}`,
+    data
+  );
+
+  return res.data;
+};
+
+// DELETE /api/leads/delete/{id}
+export const deleteLead = async (
+  id: string
+): Promise<void> => {
+  await api.delete(
+    `/leads/delete/${id}`
+  );
+};
+
+// PATCH /api/leads/{id}/transition
+export const transitionLead = async (
+  id: string,
+  data: {
+    targetStatus: LeadStatus;
+    amount?: number;
+    expectedCloseDate?: string;
+    notes?: string;
+    // NEW — only meaningful for targetStatus="WON". Assigns an engineer +
+    // department to the resulting Project right at creation.
+    assignedEngineerId?: string;
+    departmentId?: string;
+    // NEW — only meaningful for targetStatus="FOLLOW_UP". Date picked on
+    // the follow-up popup, sent along with the transition.
+    nextFollowUpDate?: string;
+  }
+): Promise<LeadResponse> => {
+  const res = await api.patch<LeadResponse>(
+    `/leads/${id}/transition`,
+    data
+  );
+
+  return res.data;
+};
+
+// GET /api/leads/admin
+export const getAdminLeads = async (): Promise<
+  LeadResponse[]
+> => {
+  const res = await api.get<
+    LeadResponse[]
+  >("/leads/admin");
+
+  return res.data;
+};
+
+// GET /api/leads/my
+export const getMyLeads = async (): Promise<
+  LeadResponse[]
+> => {
+  const res = await api.get<
+    LeadResponse[]
+  >("/leads/my");
+
+  return res.data;
+};
+
+// POST /api/leads/website
+export const createWebsiteLead = async (
+  data: Partial<CreateLeadRequest>
+): Promise<LeadResponse> => {
+  const res = await api.post<LeadResponse>(
+    "/leads/website",
+    data
+  );
+
+  return res.data;
+};

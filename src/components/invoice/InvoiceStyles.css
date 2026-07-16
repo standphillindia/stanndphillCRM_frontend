@@ -1,0 +1,467 @@
+/* ======================================================
+   STANDPHILL INDIA - PROFORMA INVOICE
+   Pixel-perfect recreation stylesheet
+   Plain CSS only. No frameworks.
+====================================================== */
+
+.pi-page {
+  position: relative;
+  width: 210mm;
+    height: 297mm;
+  margin: 0 auto;
+  background: #ffffff;
+  box-sizing: border-box;
+  padding: 14mm 12mm 22mm 12mm;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #1a1a1a;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow: hidden;
+}
+
+.pi-page * {
+  box-sizing: border-box;
+}
+
+/* ======================================================
+   TOP RIGHT RIBBON (flex allowed only for header/logo)
+====================================================== */
+
+/* .pi-ribbon-topright {
+    position:absolute;
+    top:0;
+    left:0;
+    width:100%;
+    height:68px;
+    overflow:hidden;
+    z-index:0;
+    pointer-events:none;
+}
+.pi-ribbon-topright-navy {
+  position: absolute;
+  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: #241d4d;
+}
+
+.pi-ribbon-topright-orange {
+    position:absolute;
+    top:0;
+    right:0;
+    width:58%;
+    height:68px;
+    background:#f4631e;
+
+    clip-path:polygon(
+        34% 100%,
+        100% 100%,
+        100% 0,
+        0 0
+    );
+} */
+.pi-header-wave{
+    position:absolute;
+    top:0;
+    left:0;
+    width:100%;
+    height:70px;
+    z-index:0;
+}
+.pi-footer-wave{
+    position:absolute;
+    left:0;
+    bottom:0;
+    width:100%;
+    height:34px;
+    pointer-events:none;
+}
+.pi-header{
+    position:relative;
+    z-index:2;
+    padding-top:20px;
+}
+/* ======================================================
+   HEADER (flex permitted here only)
+====================================================== */
+
+.pi-header {
+    position:relative;
+    z-index:5;
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    padding-top:18px;
+}
+/* .pi-header::before{
+    content:"";
+    position:absolute;
+    top:-14mm;
+    left:-12mm;
+    width:calc(100% + 24mm);
+    height:48px;
+    background:#211b48;
+    z-index:-2;
+    clip-path:polygon(
+        0 0,
+        100% 0,
+        100% 55%,
+        65% 55%,
+        48% 0
+    );
+} */
+/* .pi-header::after{
+    content:"";
+    position:absolute;
+    top:-14mm;
+    right:-12mm;
+    width:48%;
+    height:48px;
+    background:#f4631e;
+    z-index:-1;
+    clip-path:polygon(
+        22% 55%,
+        100% 0,
+        100% 100%,
+        0 100%
+    );
+} */
+.pi-header-left {
+  width: 58%;
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+}
+
+.pi-logo {
+    width:100%;
+    max-width: 355px;
+    height:auto;
+    display:block;
+    object-fit:contain;
+}
+.pi-header-right {
+    width:42%;
+    flex:none;
+    padding-top:6px;
+    text-align:right;
+    font-size:13.5px;
+    line-height:1.42;
+    font-weight:700;
+    color: #111;
+}
+.pi-header-right p{
+    margin:0;
+    white-space:nowrap;
+}
+.pi-header-right div{
+  display: block;
+  margin: 0 0 3px 0;
+  white-space: nowrap;
+}
+.pi-header-divider {
+  height: 4px;
+  background:#1b2745;
+  margin-top: 5px;
+  margin-bottom: 16px;
+}
+
+/* ======================================================
+   TITLE
+====================================================== */
+
+.pi-title {
+  text-align: center;
+  font-size: 26px;
+  font-weight: 800;
+  margin: 4px 0 18px 0;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-thickness: 2px;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.12);
+  position: relative;
+  z-index: 1;
+}
+
+.pi-title-black {
+  color: #000;
+}
+
+.pi-title-orange {
+  color: #f4631e;
+}
+
+/* ======================================================
+   WATERMARK
+====================================================== */
+
+.pi-watermark {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(0deg);
+  font-size: 58px;
+  font-weight: 800;
+  color:rgba(0,0,0,.035);
+  white-space: nowrap;
+  z-index: 0;
+  pointer-events: none;
+  letter-spacing: 2px;
+}
+
+/* ======================================================
+   TABLES - GENERAL
+====================================================== */
+
+.pi-table {
+    width:100%;
+    table-layout:fixed;
+    border-collapse:collapse;
+    border:1.6px solid #000;
+    margin-bottom:12px;
+    font-size:11px;
+    background:#fff;
+}
+.pi-table td,
+.pi-table th {
+    border:1px solid #000;
+    padding:7px 10px;
+    vertical-align:top;
+    word-break:break-word;
+}
+.pi-right {
+  text-align: right;
+}
+/* ======================================================
+   CUSTOMER DETAILS TABLE
+====================================================== */
+.pi-customer-table {
+    width:100%;
+    table-layout:fixed;
+    border:1.6px solid #000;
+}
+.pi-customer-table col:first-child{
+    width:50%;
+}
+.pi-customer-table col,
+.pi-customer-table td {
+  width: 50%;
+}
+.pi-section-header-cell {
+    height:42px;
+    font-size:12px;
+    font-weight:700;
+    vertical-align:middle;
+    padding:8px 12px;
+    border-bottom:1px solid #000;
+}
+.pi-detail-cell {
+    height:165px;
+    padding:12px;
+    font-size:11px;
+    line-height:1.55;
+    vertical-align:top;
+}
+
+.pi-block-gap {
+  margin-top: 14px;
+}
+
+/* ======================================================
+   ITEMS TABLE
+====================================================== */
+
+.pi-items-table {
+  table-layout: fixed;
+}
+
+.pi-col-desc {
+  width: 58%;
+  text-align: left;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.pi-col-hsn {
+  width: 14%;
+  text-align: center;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.pi-col-amount {
+  width: 28%;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.pi-item-desc {
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.pi-item-hsn {
+  text-align: center;
+  font-size: 11.5px;
+}
+
+.pi-item-amount {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.pi-bold-row td {
+  font-weight: 700;
+  font-size: 11.5px;
+}
+
+.pi-bank-tax-row td {
+  vertical-align: top;
+  padding: 8px 10px;
+}
+
+.pi-bank-cell {
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.pi-tax-cell {
+  padding: 0 !important;
+}
+
+.pi-tax-subtable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.pi-tax-subtable td {
+  border: none;
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+
+.pi-tax-subtable tr + tr td {
+  border-top: none;
+}
+
+.pi-tax-label {
+  text-align: left;
+  width: 55%;
+}
+
+.pi-tax-value {
+  width: 45%;
+}
+
+.pi-total-row td {
+  font-weight: 800;
+  font-size: 12.5px;
+  border-top: 2px solid #000;
+}
+.pi-contact{
+    margin-top:8px !important;
+    font-size:12px;
+    font-weight:700;
+    line-height:1.35;
+}
+/* ======================================================
+   FOOTER
+====================================================== */
+.pi-footer{
+    position:absolute;
+    left:12mm;
+    right:12mm;
+    bottom:32px;
+}
+.pi-footer-text {
+    position:relative;
+    z-index:5;
+    margin-top:34px;
+    text-align:center;
+    font-size:9px;
+    line-height:1.45;
+    color:#333;
+    font-weight:400;
+}
+.pi-footer-text div:first-child{
+    margin-bottom:4px;
+}
+.pi-footer-text div:last-child{
+    font-size:9px;
+    font-weight:500;
+}
+.pi-footer-note {
+    position:relative;
+    z-index:5;
+    margin-top:10px;
+    text-align:center;
+    font-size:7px;
+    color:#666;
+    font-style:italic;
+    line-height:1.3;
+    letter-spacing:.2px;
+}
+.pi-ribbon-bottom {
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:0;
+    height:34px;
+    overflow:hidden;
+    z-index:0;
+}
+.pi-ribbon-bottom-navy {
+    position:absolute;
+    left:0;
+    bottom:0;
+    width:100%;
+    height:18px;
+    background:#0f1f3d;
+    clip-path:none;
+}
+.pi-ribbon-bottom-orange {
+    position:absolute;
+    left:0;
+    bottom:18px;
+    width:100%;
+    height:6px;
+    background:#f4631e;
+    clip-path:none;
+}
+.invoice-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  background: #e9e9e9;
+  padding: 20px;
+}
+
+@media print {
+  .invoice-wrapper {
+    padding: 0;
+    background: white;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #standphill-pi,
+  #standphill-pi * {
+    visibility: visible;
+  }
+
+  #standphill-pi {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+}
