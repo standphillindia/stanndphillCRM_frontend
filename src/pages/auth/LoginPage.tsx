@@ -39,7 +39,7 @@ export default function LoginPage() {
         // unreachable, wrong VITE_API_BASE_URL, or DNS/timeout. This is
         // NOT a wrong-password case, so don't say "Invalid email or password".
         setError(
-          "Server se connect nahi ho pa raha (network/CORS issue). Kripya thodi der baad try karein ya IT team ko batayein."
+          "Server Issue, Contact your administrator. "
         );
       } else if (ax.response.status === 401) {
         setError("Email ya password galat hai.");
