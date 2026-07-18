@@ -1,20 +1,13 @@
 // src/services/orgService.ts
 //
-// Small helper service for org-structure dropdowns (departments) used by
-// the "Mark Lead as Won" form and anywhere else that needs to pick a
-// department. Engineers are fetched via userService.fetchUsers({ role:
-// "ENGINEER" }) instead — no separate endpoint needed for that, it's
-// already real and working.
+// Kept only for backward compatibility with existing imports
+// (e.g. LeadsPage.tsx's "Mark as Won" modal). The real implementation now
+// lives in orgSetupService.ts — this file just re-exports it under the
+// old names, so nothing importing from "orgService" needs to change.
+//
+// Prefer importing from "orgSetupService" directly in any NEW code.
 
-import api from "../api/axios";
-
-export interface DepartmentResponse {
-  id: string;
-  name: string;
-}
-
-// GET /api/org/setup/departments
-export const fetchDepartments = async (): Promise<DepartmentResponse[]> => {
-  const res = await api.get<DepartmentResponse[]>("/org/setup/departments");
-  return res.data;
-};
+export {
+  fetchDepartments,
+  type OrgSetupOption as DepartmentResponse,
+} from "./orgsetupservice";

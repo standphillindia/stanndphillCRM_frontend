@@ -1,5 +1,6 @@
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { logoutUser } from "../services/authService";
+import { useAuth } from "../context/AuthContext";
 import {
   LayoutDashboard,
   Users,
@@ -64,11 +65,13 @@ const NAV: NavItem[] = [
 export default function Sidebar({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
   const handleLogout = async () => {
     await logoutUser();
+    logout(); // updates AuthContext state right away
     navigate("/login");
   };
 

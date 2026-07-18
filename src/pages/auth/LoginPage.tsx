@@ -4,11 +4,13 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser } from "../../services/authService";
+import { useAuth } from "../../context/AuthContext";
 import logo from "../../assets/brandlogo.png.png";   // ✅
 
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
@@ -21,17 +23,33 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await loginUser({ email, password });
+      const data = await loginUser({ email, password });
       localStorage.setItem("userEmail", email);
+      login(data.accessToken); // updates AuthContext state right away
       navigate("/dashboard");
     } catch (err: unknown) {
       const ax = err as {
         response?: { data?: { message?: string }; status?: number };
         message?: string;
       };
-      setError(
-        ax.response?.data?.message ?? ax.message ?? "Invalid email or password."
-      );
+
+      if (!ax.response) {
+        // No response object means the browser blocked/couldn't complete
+        // the request itself — CORS preflight rejection, backend down/
+        // unreachable, wrong VITE_API_BASE_URL, or DNS/timeout. This is
+        // NOT a wrong-password case, so don't say "Invalid email or password".
+        setError(
+          "Server se connect nahi ho pa raha (network/CORS issue). Kripya thodi der baad try karein ya IT team ko batayein."
+        );
+      } else if (ax.response.status === 401) {
+        setError("Email ya password galat hai.");
+      } else if (ax.response.status === 403) {
+        setError("Aapko is system tak access nahi hai. Administrator se sampark karein.");
+      } else {
+        setError(
+          ax.response?.data?.message ?? ax.message ?? "Kuch galat ho gaya. Dubara try karein."
+        );
+      }
     } finally {
       setLoading(false);
     }

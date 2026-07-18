@@ -82,6 +82,9 @@ function avatarColor(name: string) {
 }
 
 // ── Empty form ────────────────────────────────────────────────────────────────
+// NOTE: nextFollowUpDate intentionally NOT included here anymore — follow-up
+// dates are set exclusively via the table's status-dropdown -> FOLLOW_UP
+// modal, not via manual entry on create.
 
 const EMPTY_FORM: CreateLeadRequest = {
   companyName: "",
@@ -92,10 +95,12 @@ const EMPTY_FORM: CreateLeadRequest = {
   certificationType: "",
   source: "MANUAL",
   assignedToEmail: "",
-  nextFollowUpDate: "",
 };
 
 // ── Form field config ─────────────────────────────────────────────────────────
+// NOTE: "Next Follow-up Date" field removed from here on purpose — it no
+// longer appears in either the New Lead or Edit Lead forms. The table's
+// FOLLOW_UP status flow (unchanged) remains the only way to set/update it.
 
 const FORM_FIELDS = [
   { name: "companyName",       label: "Company Name",       type: "text",  placeholder: "ABC Pvt Ltd",          icon: "domain"          },
@@ -105,7 +110,6 @@ const FORM_FIELDS = [
   { name: "product",           label: "Product",            type: "text",  placeholder: "ISO 9001",              icon: "inventory_2"     },
   { name: "certificationType", label: "Certification Type", type: "text",  placeholder: "ISO",                   icon: "verified"        },
   { name: "assignedToEmail",   label: "Assign To (Email)", type: "email", placeholder: "admin@standphill.com",  icon: "manage_accounts" },
-  { name: "nextFollowUpDate",  label: "Next Follow-up Date", type: "date", placeholder: "",                     icon: "event"           },
 ] as const;
 
 // ── Skeleton row ──────────────────────────────────────────────────────────────
@@ -193,7 +197,7 @@ export default function LeadsPage() {
     fetchDepartments().then(setDepartments).catch(() => setDepartments([]));
   }, []);
 
-  // ── FOLLOW UP Modal State ──────────────────────────────────────────────────
+  // ── FOLLOW UP Modal State (unchanged — table's status flow) ──────────────
   const [followUpLead, setFollowUpLead] = useState<LeadResponse | null>(null);
   const [followUpDateInput, setFollowUpDateInput] = useState("");
   const [followUpError, setFollowUpError] = useState<string | null>(null);
@@ -264,11 +268,13 @@ export default function LeadsPage() {
   }, [search, statusFilter, sourceFilter]);
 
   // ── Create ─────────────────────────────────────────────────────────────────
+  // NOTE: no longer strips/forwards nextFollowUpDate — the field doesn't
+  // exist in this form anymore, so the payload is sent as-is.
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddLoading(true); setAddError(null);
     try {
-      await createLead({ ...addForm, nextFollowUpDate: addForm.nextFollowUpDate || undefined });
+      await createLead(addForm);
       setShowAdd(false); setAddForm(EMPTY_FORM); loadLeads(0);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { message?: string } }; message?: string };
@@ -277,6 +283,10 @@ export default function LeadsPage() {
   };
 
   // ── Edit ───────────────────────────────────────────────────────────────────
+  // NOTE: nextFollowUpDate is still carried in editForm's internal state
+  // (set below, not shown in the form) purely so an existing lead's
+  // follow-up date is preserved on save, instead of being silently wiped
+  // out by submitting a form that no longer has a field for it.
   const openEdit = (lead: LeadResponse) => {
     setEditLead(lead);
     setEditForm({
@@ -364,7 +374,7 @@ export default function LeadsPage() {
     }
   };
 
-  // ── FOLLOW UP Submit ───────────────────────────────────────────────────────
+  // ── FOLLOW UP Submit (unchanged — table's status flow) ────────────────────
   const handleFollowUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -804,7 +814,7 @@ export default function LeadsPage() {
                   <input
                     type={f.type}
                     placeholder={f.placeholder}
-                    required={f.name !== "nextFollowUpDate"}
+                    required
                     value={addForm[f.name] ?? ""}
                     onChange={(e) => setAddForm((prev) => ({ ...prev, [f.name]: e.target.value }))}
                     className={inputCls}
@@ -890,7 +900,7 @@ export default function LeadsPage() {
                   <input
                     type={f.type}
                     placeholder={f.placeholder}
-                    required={f.name !== "nextFollowUpDate"}
+                    required
                     value={editForm[f.name] ?? ""}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, [f.name]: e.target.value }))}
                     className={inputCls}
@@ -1081,7 +1091,7 @@ export default function LeadsPage() {
         </Modal>
       )}
 
-      {/* ── FOLLOW UP Modal ───────────────────────────────────────────────── */}
+      {/* ── FOLLOW UP Modal (unchanged — table's status flow) ─────────────── */}
       {followUpLead && (
         <Modal onClose={() => setFollowUpLead(null)}>
           <div className="px-6 pt-6 pb-2 border-b border-outline-variant/10 flex items-center justify-between">
