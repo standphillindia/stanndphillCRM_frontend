@@ -10,6 +10,7 @@ import {
   type InvoiceDetailsResponse,
   type InvoiceItemResponse,
 } from "../../services/invoiceService";
+import { SIGNATORIES } from "../../config/signatories";
 
 interface Props {
   invoice: InvoiceDetailsResponse;
@@ -47,9 +48,11 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
   const [error, setError] = useState<string | null>(null);
 
   const [clientName, setClientName] = useState(invoice.clientName);
+  const [invoiceNumber, setInvoiceNumber] = useState(invoice.invoiceNumber);
   const [clientGst, setClientGst] = useState(invoice.clientGst);
   const [billingAddress, setBillingAddress] = useState(invoice.billingAddress);
   const [remarks, setRemarks] = useState(invoice.remarks || "");
+  const [signatoryName, setSignatoryName] = useState(invoice.signatoryName || "");
   const [items, setItems] = useState<EditableItem[]>(
     invoice.items.map((it) => ({ ...it, _key: it.id }))
   );
@@ -76,10 +79,12 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
     setError(null);
     try {
       const updated = await updateAmcInvoiceDetails(invoice.id, {
+        invoiceNumber: invoiceNumber.trim() || undefined,
         clientName,
         clientGst,
         billingAddress,
         remarks,
+        signatoryName: signatoryName || undefined,
         taxableAmount,
         taxAmount,
         totalAmount,
@@ -176,6 +181,14 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
         {/* Edit form (shown for both DRAFT and already-SENT invoices) */}
         {editMode && (
           <div className="p-6 bg-gray-50 border-b space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {isTax ? "TI No." : "PI No."}
+              </label>
+              <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+              <p className="text-xs text-gray-500 mt-1">Must stay unique across all invoices.</p>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
@@ -238,6 +251,17 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
               <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Signature</label>
+              <select value={signatoryName} onChange={(e) => setSignatoryName(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <option value="">No signature</option>
+                {SIGNATORIES.map((s) => (
+                  <option key={s.id} value={s.name}>{s.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
 
@@ -247,8 +271,10 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
         <div className="p-4 bg-gray-200 flex justify-center overflow-x-auto">
           <div id={elementId} style={{ width: "210mm" }}>
             <ProformaInvoice
-              invoiceNo={invoice.invoiceNumber}
+              invoiceNo={invoiceNumber}
               invoiceDate={invoice.issueDate}
+              invoiceType={invoice.invoiceType}
+              signatoryName={signatoryName}
               customer={{
                 companyName: clientName,
                 address: billingAddress,

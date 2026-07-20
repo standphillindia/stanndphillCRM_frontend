@@ -37,6 +37,7 @@ export interface CreateInvoiceRequest {
   issueDate: string; // YYYY-MM-DD
   dueDate: string;   // YYYY-MM-DD
   remarks?: string;
+  signatoryName?: string;
 }
 
 export interface InvoiceResponse {
@@ -290,6 +291,7 @@ export interface InvoiceDetailsResponse {
   sentDate?: string;
   remarks?: string;
   pdfAvailable: boolean;
+  signatoryName?: string;
   items: InvoiceItemResponse[];
 }
 
@@ -328,6 +330,9 @@ export const createAmcInvoice = async (
   amcId: string,
   invoiceType: "PROFORMA" | "TAX",
   req: {
+    // Optional — user-typed PI/TI number. Blank/omitted = auto-generated
+    // (PI-2026-000N / TI-2026-000N) as before.
+    invoiceNumber?: string;
     clientName: string;
     clientEmail: string;
     clientGst: string;
@@ -344,6 +349,7 @@ export const createAmcInvoice = async (
     // existing PI right at creation, so its payment status mirrors that
     // PI's instead of showing dashes.
     sourcePiId?: string;
+    signatoryName?: string;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {
@@ -389,6 +395,7 @@ export const getInvoiceDetailsById = async (invoiceId: string): Promise<InvoiceD
 export const updateAmcInvoiceDetails = async (
   invoiceId: string,
   req: {
+    invoiceNumber?: string;
     clientName?: string;
     clientGst?: string;
     billingAddress?: string;
@@ -397,6 +404,7 @@ export const updateAmcInvoiceDetails = async (
     taxAmount?: number;
     totalAmount?: number;
     items?: InvoiceLineItemRequest[];
+    signatoryName?: string;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.patch<InvoiceDetailsResponse>(
@@ -499,6 +507,7 @@ export const createProjectInvoice = async (
   projectId: string,
   invoiceType: "PROFORMA" | "TAX",
   req: {
+    invoiceNumber?: string;
     clientName: string;
     clientEmail: string;
     clientGst: string;
@@ -514,6 +523,7 @@ export const createProjectInvoice = async (
     // Only meaningful when invoiceType="TAX" — link this TI to an
     // existing PI right at creation.
     sourcePiId?: string;
+    signatoryName?: string;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {

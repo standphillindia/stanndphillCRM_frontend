@@ -11,6 +11,7 @@ import {
   type AmcInvoicePaymentRow,
 } from "../../services/invoiceService";
 import type { AmcProject } from "../../modules/amc-frontend/services/amcService";
+import { SIGNATORIES } from "../../config/signatories";
 
 interface AmcInvoiceFormModalProps {
   amc: AmcProject | null;
@@ -57,11 +58,13 @@ export default function AmcInvoiceFormModal({
   }, [isOpen, invoiceType, amc]);
 
   const [formData, setFormData] = useState({
+    invoiceNumber: "",
     clientName: amc?.clientName || "",
     clientEmail: "",
     clientGst: "",
     billingAddress: amc?.factoryName || "",
     remarks: "",
+    signatoryName: "",
   });
 
   const [lineItems, setLineItems] = useState<LineItem[]>([
@@ -77,7 +80,7 @@ export default function AmcInvoiceFormModal({
 
   if (!isOpen || !amc) return null;
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -129,6 +132,7 @@ export default function AmcInvoiceFormModal({
 
     try {
       const created = await createAmcInvoice(amc.id, invoiceType, {
+        invoiceNumber: formData.invoiceNumber.trim() || undefined,
         clientName: formData.clientName,
         clientEmail: formData.clientEmail,
         clientGst: formData.clientGst,
@@ -140,6 +144,7 @@ export default function AmcInvoiceFormModal({
         issueDate: new Date().toISOString().split("T")[0],
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
         remarks: formData.remarks,
+        signatoryName: formData.signatoryName || undefined,
         sourcePiId: invoiceType === "TAX" && selectedPiId ? selectedPiId : undefined,
         items: lineItems.map((item) => ({
           description: item.description,
@@ -207,6 +212,18 @@ export default function AmcInvoiceFormModal({
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">⚠️ {error}</div>
           )}
+
+          <div className="border-b pb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {invoiceType === "PROFORMA" ? "PI No." : "TI No."} (Optional)
+            </label>
+            <input type="text" name="invoiceNumber" value={formData.invoiceNumber} onChange={handleInputChange}
+              placeholder={invoiceType === "PROFORMA" ? "e.g. PI-2026-0048" : "e.g. TI-2026-0048"}
+              className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`} />
+            <p className="text-xs text-gray-500 mt-1">
+              Leave blank to auto-generate the next number. Type your own to override it.
+            </p>
+          </div>
 
           <div className="border-b pb-4">
             <h3 className="font-semibold text-gray-700 mb-3">Client Details</h3>
@@ -317,6 +334,20 @@ export default function AmcInvoiceFormModal({
             <label className="block text-sm font-medium text-gray-700 mb-1">Remarks (Optional)</label>
             <textarea name="remarks" value={formData.remarks} onChange={handleInputChange} rows={3}
               className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`} />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Signature (Optional)</label>
+            <select name="signatoryName" value={formData.signatoryName} onChange={handleInputChange}
+              className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`}>
+              <option value="">No signature</option>
+              {SIGNATORIES.map((s) => (
+                <option key={s.id} value={s.name}>{s.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Adds the selected authorised signatory's signature to the bottom of this {invoiceType === "PROFORMA" ? "PI" : "TI"}.
+            </p>
           </div>
 
           <div className="flex gap-3 pt-4 border-t">
