@@ -1,11 +1,12 @@
 // src/constants/permissionConstants.ts
 // Defines the modules used to build the RBAC permission matrix.
 //
-// NOTE: Backend (role_module_permissions table + ModuleAccessFilter) enforces
-// access at the MODULE level only — one "allowed" boolean per (role, module).
-// It does not distinguish View/Create/Edit/Delete. So the matrix here is a
-// single Access toggle per module, matching what the backend can actually
-// enforce.
+// Backend (role_module_permissions table + ModuleAccessFilter) now enforces
+// access per (role, module, action) — 4 independent flags per module:
+//   canRead   -> view/list this module at all (also drives sidebar visibility)
+//   canWrite  -> create new records
+//   canEdit   -> update existing records
+//   canDelete -> delete records
 
 export const PERMISSION_MODULES = [
   { key: "LEADS",          label: "Leads",          icon: "person_search" },
@@ -20,5 +21,19 @@ export const PERMISSION_MODULES = [
 
 export type PermissionModule = (typeof PERMISSION_MODULES)[number]["key"];
 
-// One boolean per module — "does this role have access to this module at all".
-export type RolePermissionMap = Record<PermissionModule, boolean>;
+export interface ModuleActionFlags {
+  canRead: boolean;
+  canWrite: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
+export const PERMISSION_ACTIONS: { key: keyof ModuleActionFlags; label: string }[] = [
+  { key: "canRead",   label: "Read" },
+  { key: "canWrite",  label: "Write" },
+  { key: "canEdit",   label: "Edit" },
+  { key: "canDelete", label: "Delete" },
+];
+
+// One set of 4 action flags per module.
+export type RolePermissionMap = Record<PermissionModule, ModuleActionFlags>;

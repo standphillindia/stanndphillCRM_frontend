@@ -1,22 +1,25 @@
 // src/services/permissionService.ts
 //
-// Connected to the real backend now:
-//   GET /api/admin/permissions          -> flat list of {roleId, roleName, module, allowed}
-//   PUT /api/admin/permissions          -> body {roleId, module, allowed}, updates ONE row
+// Connected to the real backend:
+//   GET /api/admin/permissions   -> flat list of {roleId, roleName, module, canRead, canWrite, canEdit, canDelete}
+//   PUT /api/admin/permissions   -> body {roleId, module, canRead, canWrite, canEdit, canDelete}, updates ONE row
 //
-// Backend enforces access per (role, module) only — no per-action (view/create/
-// edit/delete) granularity — so the matrix here is a single Access toggle per
-// module, matching what ModuleAccessFilter can actually check.
+// Backend now enforces access per (role, module, action) — GET->canRead,
+// POST->canWrite, PUT/PATCH->canEdit, DELETE->canDelete — matching the
+// 4-column matrix rendered here.
 
 import api from "../api/axios";
-import { PERMISSION_MODULES, type RolePermissionMap, type PermissionModule } from "../constants/permissionConstants";
+import { PERMISSION_MODULES, type RolePermissionMap, type PermissionModule, type ModuleActionFlags } from "../constants/permissionConstants";
 import { USER_ROLES, type UserRole } from "../constants/userConstants";
 
 interface PermissionRow {
   roleId: string;
   roleName: string;
   module: string;
-  allowed: boolean;
+  canRead: boolean;
+  canWrite: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }
 
 export interface RolePermissionsData {
@@ -26,11 +29,18 @@ export interface RolePermissionsData {
   roleIds: Partial<Record<UserRole, string>>;
 }
 
+const emptyFlags = (): ModuleActionFlags => ({
+  canRead: false,
+  canWrite: false,
+  canEdit: false,
+  canDelete: false,
+});
+
 const emptyModuleMap = (): RolePermissionMap =>
-  Object.fromEntries(PERMISSION_MODULES.map((m) => [m.key, false])) as RolePermissionMap;
+  Object.fromEntries(PERMISSION_MODULES.map((m) => [m.key, emptyFlags()])) as RolePermissionMap;
 
 // ─────────────────────────────────────────────────────────────
-// GET /api/admin/permissions  →  fetch the full role → module matrix
+// GET /api/admin/permissions  →  fetch the full role → module → action matrix
 // ─────────────────────────────────────────────────────────────
 export const fetchRolePermissions = async (): Promise<RolePermissionsData> => {
   const res = await api.get<PermissionRow[]>("/admin/permissions");
@@ -49,7 +59,12 @@ export const fetchRolePermissions = async (): Promise<RolePermissionsData> => {
 
     const moduleKey = row.module as PermissionModule;
     if (PERMISSION_MODULES.some((m) => m.key === moduleKey)) {
-      permissions[roleName][moduleKey] = row.allowed;
+      permissions[roleName][moduleKey] = {
+        canRead: row.canRead,
+        canWrite: row.canWrite,
+        canEdit: row.canEdit,
+        canDelete: row.canDelete,
+      };
     }
   }
 
@@ -58,9 +73,9 @@ export const fetchRolePermissions = async (): Promise<RolePermissionsData> => {
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/admin/permissions/mine  →  modules the CURRENT logged-in user's
-// role is allowed to access. Used by the sidebar to hide nav items the
-// user has no permission for (instead of showing everything and only
-// blocking access after they click through).
+// role can at least read. Used by the sidebar to hide nav items the user
+// has no permission for (instead of showing everything and only blocking
+// access after they click through).
 // ─────────────────────────────────────────────────────────────
 export const fetchMyModules = async (): Promise<string[]> => {
   const res = await api.get<string[]>("/admin/permissions/mine");
@@ -68,9 +83,9 @@ export const fetchMyModules = async (): Promise<string[]> => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// PUT /api/admin/permissions  →  save every module's access for one role.
-// Backend only accepts one (roleId, module, allowed) row per call, so we
-// fire one PUT per module in parallel.
+// PUT /api/admin/permissions  →  save every module's 4 action flags for one
+// role. Backend only accepts one (roleId, module, ...flags) row per call,
+// so we fire one PUT per module in parallel.
 // ─────────────────────────────────────────────────────────────
 export const updateRolePermissions = async (
   roleId: string,
@@ -81,7 +96,10 @@ export const updateRolePermissions = async (
       api.put("/admin/permissions", {
         roleId,
         module: m.key,
-        allowed: modulePermissions[m.key],
+        canRead: modulePermissions[m.key].canRead,
+        canWrite: modulePermissions[m.key].canWrite,
+        canEdit: modulePermissions[m.key].canEdit,
+        canDelete: modulePermissions[m.key].canDelete,
       })
     )
   );

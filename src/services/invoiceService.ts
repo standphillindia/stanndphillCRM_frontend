@@ -37,7 +37,6 @@ export interface CreateInvoiceRequest {
   issueDate: string; // YYYY-MM-DD
   dueDate: string;   // YYYY-MM-DD
   remarks?: string;
-  signatoryName?: string;
 }
 
 export interface InvoiceResponse {
@@ -291,7 +290,6 @@ export interface InvoiceDetailsResponse {
   sentDate?: string;
   remarks?: string;
   pdfAvailable: boolean;
-  signatoryName?: string;
   items: InvoiceItemResponse[];
 }
 
@@ -330,9 +328,6 @@ export const createAmcInvoice = async (
   amcId: string,
   invoiceType: "PROFORMA" | "TAX",
   req: {
-    // Optional — user-typed PI/TI number. Blank/omitted = auto-generated
-    // (PI-2026-000N / TI-2026-000N) as before.
-    invoiceNumber?: string;
     clientName: string;
     clientEmail: string;
     clientGst: string;
@@ -349,7 +344,6 @@ export const createAmcInvoice = async (
     // existing PI right at creation, so its payment status mirrors that
     // PI's instead of showing dashes.
     sourcePiId?: string;
-    signatoryName?: string;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {
@@ -395,7 +389,6 @@ export const getInvoiceDetailsById = async (invoiceId: string): Promise<InvoiceD
 export const updateAmcInvoiceDetails = async (
   invoiceId: string,
   req: {
-    invoiceNumber?: string;
     clientName?: string;
     clientGst?: string;
     billingAddress?: string;
@@ -404,7 +397,6 @@ export const updateAmcInvoiceDetails = async (
     taxAmount?: number;
     totalAmount?: number;
     items?: InvoiceLineItemRequest[];
-    signatoryName?: string;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.patch<InvoiceDetailsResponse>(
@@ -507,7 +499,6 @@ export const createProjectInvoice = async (
   projectId: string,
   invoiceType: "PROFORMA" | "TAX",
   req: {
-    invoiceNumber?: string;
     clientName: string;
     clientEmail: string;
     clientGst: string;
@@ -523,7 +514,6 @@ export const createProjectInvoice = async (
     // Only meaningful when invoiceType="TAX" — link this TI to an
     // existing PI right at creation.
     sourcePiId?: string;
-    signatoryName?: string;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {
@@ -560,5 +550,54 @@ export const getProjectInvoiceSummary = async (projectId: string): Promise<Proje
  */
 export const getProjectInvoicesWithPayment = async (projectId: string): Promise<ProjectInvoicePaymentRow[]> => {
   const response = await api.get<ProjectInvoicePaymentRow[]>(`/finance/invoices/project/${projectId}/with-payment`);
+  return response.data;
+};
+
+// ─────────────────────────────────────────────────────────────
+// Lead-scoped invoices (pre-WON finance flow)
+// ─────────────────────────────────────────────────────────────
+// A PI raised here auto-moves the lead NEGOTIATION → PI_RAISED; recording
+// its full payment (Payments module) → PAYMENT_RECEIVED; generating the
+// TI from that PI → READY_TO_WON (Admin's Ready-to-Won task list).
+
+/**
+ * Create a PI (or a TI linked to a paid PI) directly against a Lead —
+ * before any Project exists. Same shape as createProjectInvoice.
+ */
+export const createLeadInvoice = async (
+  leadId: string,
+  invoiceType: "PROFORMA" | "TAX",
+  req: {
+    clientName: string;
+    clientEmail: string;
+    clientGst: string;
+    billingAddress: string;
+    amount: number;
+    taxableAmount: number;
+    taxAmount: number;
+    totalAmount: number;
+    issueDate: string;
+    dueDate: string;
+    remarks?: string;
+    items?: InvoiceLineItemRequest[];
+    sourcePiId?: string;
+  }
+): Promise<InvoiceDetailsResponse> => {
+  const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {
+    ...req,
+    leadId,
+    invoiceType,
+    referenceType: "LEAD",
+  });
+  return response.data;
+};
+
+/**
+ * PI + TI rows for a Lead combined with payment tracking — same row shape
+ * as the Project/AMC payment tables (drives the lead's PI/TI panel and
+ * the Ready-to-Won review).
+ */
+export const getLeadInvoicesWithPayment = async (leadId: string): Promise<ProjectInvoicePaymentRow[]> => {
+  const response = await api.get<ProjectInvoicePaymentRow[]>(`/finance/invoices/lead/${leadId}/with-payment`);
   return response.data;
 };

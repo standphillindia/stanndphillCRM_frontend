@@ -35,6 +35,9 @@ const STATUS_CONFIG: Record<
   QUALIFIED:   { bg: "bg-green-500/10",         text: "text-green-700",  border: "border-green-500/20",  label: "Qualified"     },
   PROPOSAL:    { bg: "bg-amber-500/10",         text: "text-amber-700",  border: "border-amber-500/20",  label: "Proposal"      },
   NEGOTIATION: { bg: "bg-purple-500/10",        text: "text-purple-700", border: "border-purple-500/20", label: "Negotiation"   },
+  PI_RAISED:        { bg: "bg-orange-500/10",  text: "text-orange-700",  border: "border-orange-500/20",  label: "PI Raised"        },
+  PAYMENT_RECEIVED: { bg: "bg-teal-500/10",    text: "text-teal-700",    border: "border-teal-500/20",    label: "Payment Received" },
+  READY_TO_WON:     { bg: "bg-lime-500/10",    text: "text-lime-700",    border: "border-lime-500/20",    label: "Ready to Won"     },
   WON:         { bg: "bg-emerald-500/10",       text: "text-emerald-700",border: "border-emerald-500/20",label: "Won"           },
   LOST:        { bg: "bg-error/10",             text: "text-error",      border: "border-error/20",      label: "Lost"          },
 };
@@ -48,7 +51,10 @@ const getAllowedStatuses = (current: LeadStatus): LeadStatus[] => {
     case "FOLLOW_UP":   return ["FOLLOW_UP", "QUALIFIED", "LOST"];
     case "QUALIFIED":   return ["QUALIFIED", "PROPOSAL", "LOST"];
     case "PROPOSAL":    return ["PROPOSAL", "NEGOTIATION", "LOST"];
-    case "NEGOTIATION": return ["NEGOTIATION", "WON", "LOST"];
+    case "NEGOTIATION": return ["NEGOTIATION", "PI_RAISED", "LOST"]; // Sales signals Finance to raise the PI
+    case "PI_RAISED":        return ["PI_RAISED", "LOST"];
+    case "PAYMENT_RECEIVED": return ["PAYMENT_RECEIVED", "READY_TO_WON"]; // Sales confirms once TI is generated
+    case "READY_TO_WON":     return ["READY_TO_WON", "LOST"]; // WON stays Admin-only, via the Ready-to-Won review
     case "WON":         return ["WON"];
     case "LOST":        return ["LOST"];
     default:            return ["NEW"];
@@ -183,6 +189,7 @@ export default function LeadsPage() {
     notes: "",
     assignedEngineerId: "",
     departmentId: "",
+    opsPersonId: "",
   });
   const [wonError, setWonError] = useState<string | null>(null);
   const [wonLoading, setWonLoading] = useState(false);
@@ -191,9 +198,13 @@ export default function LeadsPage() {
   // when the page mounts, reused every time the modal opens.
   const [engineers, setEngineers] = useState<OrgUserResponse[]>([]);
   const [departments, setDepartments] = useState<DepartmentResponse[]>([]);
+  const [opsUsers, setOpsUsers] = useState<OrgUserResponse[]>([]);
 
   useEffect(() => {
     fetchUsers({ role: "ENGINEER" }).then(setEngineers).catch(() => setEngineers([]));
+    // Ops person dropdown for the WON review — every user works; Admin
+    // typically picks someone from Operations.
+    fetchUsers({}).then(setOpsUsers).catch(() => setOpsUsers([]));
     fetchDepartments().then(setDepartments).catch(() => setDepartments([]));
   }, []);
 
@@ -335,6 +346,17 @@ export default function LeadsPage() {
 
       loadLeads(page);
 
+    } catch (err) {
+      // Without this, a rejected transition (e.g. trying to move to
+      // READY_TO_WON before Finance has generated the TI) silently
+      // reverted the dropdown with zero feedback — looked like the click
+      // "did nothing" when really the backend was correctly blocking it.
+      const anyErr = err as { response?: { data?: { message?: string } }; message?: string };
+      const reason =
+        anyErr?.response?.data?.message ??
+        anyErr?.message ??
+        "Failed to update status.";
+      alert(`⚠️ ${reason}`);
     } finally {
       setStatusLoading(null);
     }
@@ -357,11 +379,12 @@ export default function LeadsPage() {
         notes: wonForm.notes,
         assignedEngineerId: wonForm.assignedEngineerId || undefined,
         departmentId: wonForm.departmentId || undefined,
+        opsPersonId: wonForm.opsPersonId || undefined,
       });
 
       // Success: close modal and reset
       setWonLead(null);
-      setWonForm({ amount: "", expectedCloseDate: "", notes: "", assignedEngineerId: "", departmentId: "" });
+      setWonForm({ amount: "", expectedCloseDate: "", notes: "", assignedEngineerId: "", departmentId: "", opsPersonId: "" });
 
       // Reload leads
       loadLeads(page);
@@ -635,7 +658,7 @@ export default function LeadsPage() {
 
                               if (status === "WON") {
                                 setWonLead(lead);
-                                setWonForm({ amount: "", expectedCloseDate: "", notes: "", assignedEngineerId: "", departmentId: "" });
+                                setWonForm({ amount: "", expectedCloseDate: "", notes: "", assignedEngineerId: "", departmentId: "", opsPersonId: "" });
                                 setWonError(null);
                                 return;
                               }
@@ -701,7 +724,7 @@ export default function LeadsPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1
                           opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
+                                                    <button
                             onClick={() => openEdit(lead)}
                             title="Edit"
                             className="p-2 rounded-lg hover:bg-primary/10 text-primary transition-colors"
@@ -1030,6 +1053,21 @@ export default function LeadsPage() {
                   {departments.map((dept) => (
                     <option key={dept.id} value={dept.id}>
                       {dept.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Ops Person (Optional)" icon="support_agent">
+                <select
+                  value={wonForm.opsPersonId}
+                  onChange={(e) => setWonForm((prev) => ({ ...prev, opsPersonId: e.target.value }))}
+                  className="w-full h-11 px-3 rounded-xl border border-outline-variant/40 bg-surface text-body-md outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="">— Assign later —</option>
+                  {opsUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.fullName} ({u.email})
                     </option>
                   ))}
                 </select>

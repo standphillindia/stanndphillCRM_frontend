@@ -5,6 +5,9 @@ export const LEAD_STATUSES = [
   { value: "QUALIFIED", label: "Qualified" },
   { value: "PROPOSAL", label: "Proposal" },
   { value: "NEGOTIATION", label: "Negotiation" },
+  { value: "PI_RAISED", label: "PI Raised" },
+  { value: "PAYMENT_RECEIVED", label: "Payment Received" },
+  { value: "READY_TO_WON", label: "Ready to Won" },
   { value: "WON", label: "Won" },
   { value: "LOST", label: "Lost" },
 ] as const;

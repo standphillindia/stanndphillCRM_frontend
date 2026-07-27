@@ -20,6 +20,7 @@ interface DashboardStats {
   overdueTasks: number;
   overduePayments: number;
   renewalDueCertifications: number;
+  followUpsDue: number;
   unreadNotifications: number;
 }
 
@@ -38,6 +39,7 @@ export default function DashboardPage() {
     overdueTasks: 0,
     overduePayments: 0,
     renewalDueCertifications: 0,
+    followUpsDue: 0,
     unreadNotifications: 0,
   });
 
@@ -72,6 +74,7 @@ export default function DashboardPage() {
         overdueTasks: alertsRes.data.overdueTasks,
         overduePayments: alertsRes.data.overduePayments,
         renewalDueCertifications: alertsRes.data.renewalDueCertifications,
+        followUpsDue: alertsRes.data.followUpsDue,
         unreadNotifications: alertsRes.data.unreadNotifications,
       });
     } catch (error) {
@@ -137,20 +140,23 @@ export default function DashboardPage() {
                   label="Overdue Tasks"
                   value={stats.overdueTasks}
                   severity="critical"
+                  onClick={() => navigate("/my-tasks")}
                 />
                 <AlertCard
                   label="Overdue Payments"
                   value={stats.overduePayments}
                   severity="critical"
+                  onClick={() => navigate("/payments/list")}
                 />
                 <AlertCard
                   label="Certs Due (30 days)"
                   value={stats.renewalDueCertifications}
                   severity="warning"
+                  onClick={() => navigate("/certifications")}
                 />
                 <AlertCard
                   label="Follow-ups Due"
-                  value={stats.followUpLeads}
+                  value={stats.followUpsDue}
                   severity="warning"
                   onClick={() => navigate("/leads")}
                 />

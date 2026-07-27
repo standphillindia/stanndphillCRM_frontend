@@ -59,6 +59,14 @@ const NAV_ITEMS: NavItemConfig[] = [
     icon: "checklist",
   },
   {
+    path: "/my-tasks",
+    label: "My Tasks",
+    icon: "task_alt",
+    // No `module` restriction — every department (Operations, Engineering,
+    // Finance, Admin) needs their own stage-tracker task list; the backend
+    // itself scopes the results to the logged-in user's department.
+  },
+  {
     path: "/payments",
     label: "Payments",
     icon: "payments",
@@ -68,6 +76,11 @@ const NAV_ITEMS: NavItemConfig[] = [
         path: "/payments/dashboard",
         label: "Dashboard",
         icon: "dashboard",
+      },
+      {
+        path: "/payments/leads",
+        label: "Leads",
+        icon: "handshake",
       },
       {
         path: "/payments/list",
@@ -126,6 +139,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/projects":            "Projects",
   "/payments":            "Payments",
   "/payments/dashboard":  "Payment Dashboard",
+  "/payments/leads":      "Leads — Pre-WON Finance",
   "/payments/list":       "Payments",
   "/payments/amc":        "AMC Payments",
   "/documents":           "Documents",

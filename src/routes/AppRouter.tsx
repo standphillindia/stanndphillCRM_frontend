@@ -13,7 +13,11 @@ import LeadsPage from "../pages/leads/LeadsPage";
 import AMCLeadsPage from "../pages/leads/AMCLeadsPage";
 import TasksPage from "../pages/tasks/TasksPage";
 import ProjectsPage from "../pages/projects/ProjectsPage";
+import ProjectStagesPage from "../pages/projects/ProjectStagesPage";
+import MyTasksPage from "../pages/tasks/MyTasksPage";
 import PaymentsPage from "../pages/payments/PaymentsPage";
+import LeadPaymentDetails from "../modules/payment/pages/LeadPaymentDetails";
+import LeadPaymentsList from "../modules/payment/pages/LeadPaymentsList";
 import DocumentsPage from "../pages/documents/DocumentsPage";
 import CertificationsPage from "../pages/certifications/CertificationsPage";
 import UsersPage from "../pages/users/UsersPage";
@@ -51,6 +55,8 @@ export default function AppRouter() {
 
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/projects/:id/stages" element={<ProjectStagesPage />} />
+          <Route path="/my-tasks" element={<MyTasksPage />} />
 
           {/* ── Payment Module with Nested Routes ────────────────── */}
           <Route path="/payments" element={<PaymentsPage />}>
@@ -60,6 +66,8 @@ export default function AppRouter() {
             <Route path="project/:projectId" element={<ProjectPaymentDetails />} />
             <Route path="amc" element={<AmcPaymentsList />} />
             <Route path="amc/:amcId" element={<AmcPaymentDetails />} />
+            <Route path="leads" element={<LeadPaymentsList />} />
+            <Route path="lead/:leadId" element={<LeadPaymentDetails />} />
           </Route>
 
           <Route path="/documents" element={<DocumentsPage />} />

@@ -24,6 +24,14 @@ export type ProjectStage =
 // A project now carries its own money fields directly (no more Deal in
 // between) — mirrors AmcProject on the backend. `dealId` is gone,
 // replaced by `leadId` (which Lead this project came from, if any).
+//
+// NOTE ON `stage`: this is the OLD coarse-bucket ProjectStage enum. Real
+// day-by-day progress now lives in the Project Stage Tracker
+// (services/projectStageService.ts) — `stage` here only gets updated
+// automatically at a couple of milestones (e.g. set to CLOSED when the
+// tracker's final stage completes, or LICENSE_GRANTED when a certificate
+// is created). Don't build new stage-transition UI against this field —
+// use projectStageService instead.
 export interface ProjectResponse {
   id: string;
   projectName: string;
@@ -39,46 +47,31 @@ export interface ProjectResponse {
   receivedAmount: number;
   pendingAmount: number;
   overdueAmount: number;
+
+  // ── 45-day stage tracker — the current stage to actually show in the
+  // UI. `stage` above is the legacy single-enum field, kept only for
+  // internal finance bookkeeping — don't display it.
+  currentStageDisplayName: string | null;   // e.g. "Document Collection"
+  currentStageCode: string | null;
+  currentStageLate: boolean;
+  currentStageDaysLateOrRemaining: number | null; // negative = days late
 }
 
 // NOTE: CreateProjectRequest / createProject() were removed — POST
 // /projects no longer exists on the backend. Projects are now created
 // automatically the moment a Lead goes WON (starting in DRAFT stage).
-
-export interface ProjectTransitionRequest {
-  targetStage: ProjectStage;
-  visitDate?: string;
-  engineerEmail?: string;
-}
-
-export interface AssignProjectRequest {
-  engineerEmail: string;
-  teamName: string;
-}
-
-export interface VisitResponse {
-  id: string;
-  projectName: string;
-  engineerEmail: string;
-  visitDate: string;
-  status: "SCHEDULED" | "COMPLETED" | "EXPIRED" | "RESCHEDULED" | "CANCELLED";
-  reason: string | null;
-}
-
-export interface ScheduleVisitRequest {
-  engineerEmail: string;
-  visitDate: string;
-}
-
-export interface CompleteVisitRequest {
-  visitImageUrl: string;
-  remarks: string;
-}
-
-export interface RescheduleVisitRequest {
-  newVisitDate: string;
-  reason: string;
-}
+//
+// NOTE: The manual stage-transition flow (transitionProject, assignProject)
+// and the old engineer-visit-scheduling flow (getProjectVisits,
+// scheduleVisit, completeVisit, rescheduleVisit) were removed from this
+// file — they were only ever called from the old "Move Next" UI on
+// ProjectsPage.tsx, which has been replaced by the day-wise Project Stage
+// Tracker (see ProjectStagesPage.tsx / projectStageService.ts). The
+// backend endpoints they called still exist (unused, not deleted), so
+// this can be restored if that workflow is ever needed again.
+//
+// NOTE: updateProject / deleteProject were also removed as dead code —
+// nothing in the app called them.
 
 interface BackendPage {
   content: ProjectResponse[];
@@ -133,7 +126,7 @@ export const fetchProjects = async (
   };
 };
 
-// NEW — same data as fetchProjects() above, but reachable under
+// Same data as fetchProjects() above, but reachable under
 // /api/payments/projects instead of /api/projects/filter. Used by the
 // Payments > List page so a Finance-role user only needs PAYMENTS module
 // access to see it (not PROJECTS, which would also expose the full
@@ -168,67 +161,7 @@ export const fetchProjectsForPayments = async (
   };
 };
 
-// NOTE: createProject() was removed along with CreateProjectRequest —
-// see the note near that interface above.
-
 export const getProjectById = async (id: string): Promise<ProjectResponse> => {
   const res = await api.get<ProjectResponse>(`/projects/${id}`);
   return res.data;
-};
-
-export const transitionProject = async (
-  id: string,
-  req: ProjectTransitionRequest
-): Promise<ProjectResponse> => {
-  const res = await api.patch<ProjectResponse>(`/projects/${id}/transition`, req);
-  return res.data;
-};
-
-export const assignProject = async (
-  id: string,
-  req: AssignProjectRequest
-): Promise<ProjectResponse> => {
-  const res = await api.patch<ProjectResponse>(`/projects/${id}/assign`, req);
-  return res.data;
-};
-
-export const getProjectVisits = async (projectId: string): Promise<VisitResponse[]> => {
-  const res = await api.get<VisitResponse[]>(`/projects/${projectId}/visits`);
-  return res.data;
-};
-
-export const scheduleVisit = async (
-  projectId: string,
-  req: ScheduleVisitRequest
-): Promise<VisitResponse> => {
-  const res = await api.post<VisitResponse>(`/projects/${projectId}/visit`, req);
-  return res.data;
-};
-
-export const completeVisit = async (
-  visitId: string,
-  req: CompleteVisitRequest
-): Promise<VisitResponse> => {
-  const res = await api.post<VisitResponse>(`/projects/visits/${visitId}/complete`, req);
-  return res.data;
-};
-
-export const rescheduleVisit = async (
-  visitId: string,
-  req: RescheduleVisitRequest
-): Promise<VisitResponse> => {
-  const res = await api.patch<VisitResponse>(`/projects/visits/${visitId}/reschedule`, req);
-  return res.data;
-};
-
-export const updateProject = async (
-  id: string,
-  data: Partial<ProjectResponse>
-): Promise<ProjectResponse> => {
-  const res = await api.put<ProjectResponse>(`/projects/${id}`, data);
-  return res.data;
-};
-
-export const deleteProject = async (id: string): Promise<void> => {
-  await api.delete(`/projects/${id}`);
 };

@@ -159,6 +159,8 @@ export const transitionLead = async (
     // department to the resulting Project right at creation.
     assignedEngineerId?: string;
     departmentId?: string;
+    // NEW — the Ops person Admin picked on the Ready-to-Won review.
+    opsPersonId?: string;
     // NEW — only meaningful for targetStatus="FOLLOW_UP". Date picked on
     // the follow-up popup, sent along with the transition.
     nextFollowUpDate?: string;
@@ -203,5 +205,37 @@ export const createWebsiteLead = async (
     data
   );
 
+  return res.data;
+};
+
+// ─────────────────────────────────────────────────────────────
+// Ready-to-Won admin task list (pre-WON finance flow)
+// ─────────────────────────────────────────────────────────────
+// One row = a lead whose PI is fully paid and whose TI is generated —
+// waiting for Admin to verify PI + TI + amount, assign the Ops person +
+// Engineer, and press WON (which creates the Project at Day 1).
+
+export interface ReadyToWonLeadResponse {
+  leadId: string;
+  companyName: string;
+  contactName: string;
+  email: string;
+  phone: string;
+  product: string;
+  certificationType: string;
+  assignedToEmail: string;
+  updatedAt?: string;
+  piInvoiceId?: string;
+  piNumber?: string;
+  piTotal?: number;
+  piPaid?: number;
+  piPaymentStatus?: string;
+  tiInvoiceId?: string;
+  tiNumber?: string;
+  tiIssueDate?: string;
+}
+
+export const fetchReadyToWonLeads = async (): Promise<ReadyToWonLeadResponse[]> => {
+  const res = await api.get<ReadyToWonLeadResponse[]>("/leads/ready-to-won");
   return res.data;
 };

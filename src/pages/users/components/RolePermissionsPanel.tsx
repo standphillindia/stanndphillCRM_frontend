@@ -1,7 +1,7 @@
 // src/pages/users/components/RolePermissionsPanel.tsx
-// RBAC matrix — pick a role, toggle module access, save.
-// One Access toggle per module (matches backend's per-module "allowed" flag —
-// there's no separate view/create/edit/delete on the backend).
+// RBAC matrix — pick a role, toggle Read/Write/Edit/Delete per module, save.
+// Backend enforces this per-action now: GET->canRead, POST->canWrite,
+// PUT/PATCH->canEdit, DELETE->canDelete.
 
 import { useEffect, useState } from "react";
 import {
@@ -11,7 +11,9 @@ import {
 } from "../../../services/permissionService";
 import {
   PERMISSION_MODULES,
+  PERMISSION_ACTIONS,
   type PermissionModule,
+  type ModuleActionFlags,
 } from "../../../constants/permissionConstants";
 import { USER_ROLES, type UserRole } from "../../../constants/userConstants";
 
@@ -37,18 +39,33 @@ export default function RolePermissionsPanel() {
       .finally(() => setLoading(false));
   };
 
-  const toggle = (moduleKey: PermissionModule) => {
+  const toggleAction = (moduleKey: PermissionModule, action: keyof ModuleActionFlags) => {
     if (!data) return;
     setData((prev) => {
       if (!prev) return prev;
       const current = prev.permissions[activeRole][moduleKey];
+      const nextFlags: ModuleActionFlags = { ...current, [action]: !current[action] };
+
+      // Read is the master switch — turning it off means "no access to this
+      // module at all", so write/edit/delete without read access don't make
+      // sense and get cleared with it. Turning individual write/edit/delete
+      // on implicitly requires read (you can't create/edit/delete something
+      // you can't even see), so it gets switched on automatically too.
+      if (action === "canRead" && !nextFlags.canRead) {
+        nextFlags.canWrite = false;
+        nextFlags.canEdit = false;
+        nextFlags.canDelete = false;
+      } else if (action !== "canRead" && nextFlags[action]) {
+        nextFlags.canRead = true;
+      }
+
       return {
         ...prev,
         permissions: {
           ...prev.permissions,
           [activeRole]: {
             ...prev.permissions[activeRole],
-            [moduleKey]: !current,
+            [moduleKey]: nextFlags,
           },
         },
       };
@@ -88,6 +105,8 @@ export default function RolePermissionsPanel() {
 
   const rolePerms = data.permissions[activeRole];
   const roleMissing = !data.roleIds[activeRole];
+  const isAdminRole = activeRole === "ADMIN";
+  const disabled = isAdminRole || roleMissing;
 
   return (
     <div className="space-y-4">
@@ -116,7 +135,7 @@ export default function RolePermissionsPanel() {
 
       {roleMissing && (
         <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-body-sm text-amber-700">
-          This role has no permission rows in the database yet (it will be seeded on next backend restart, or doesn't exist as a Role record). Access toggles below won't save until it does.
+          This role has no permission rows in the database yet (it will be seeded on next backend restart, or doesn't exist as a Role record). Toggles below won't save until it does.
         </div>
       )}
 
@@ -129,15 +148,19 @@ export default function RolePermissionsPanel() {
                 <th className="px-6 py-4 text-label-caps text-outline uppercase tracking-wider whitespace-nowrap">
                   Module
                 </th>
-                <th className="px-6 py-4 text-label-caps text-outline uppercase tracking-wider text-center whitespace-nowrap">
-                  Access
-                </th>
+                {PERMISSION_ACTIONS.map((a) => (
+                  <th
+                    key={a.key}
+                    className="px-4 py-4 text-label-caps text-outline uppercase tracking-wider text-center whitespace-nowrap"
+                  >
+                    {a.label}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/10">
               {PERMISSION_MODULES.map((mod) => {
-                const checked = rolePerms[mod.key];
-                const disabled = activeRole === "ADMIN" || roleMissing; // Admin always has full access
+                const flags = rolePerms[mod.key];
                 return (
                   <tr key={mod.key} className="hover:bg-primary/[0.02] transition-colors">
                     <td className="px-6 py-4">
@@ -146,16 +169,23 @@ export default function RolePermissionsPanel() {
                         <span className="text-body-md font-medium text-on-surface">{mod.label}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={disabled}
-                        onChange={() => toggle(mod.key)}
-                        className="w-4 h-4 rounded border-outline-variant/40 text-primary
-                          focus:ring-2 focus:ring-primary/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
-                      />
-                    </td>
+                    {PERMISSION_ACTIONS.map((a) => (
+                      <td key={a.key} className="px-4 py-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={flags[a.key]}
+                          disabled={disabled || (a.key !== "canRead" && !flags.canRead)}
+                          onChange={() => toggleAction(mod.key, a.key)}
+                          title={
+                            a.key !== "canRead" && !flags.canRead
+                              ? "Enable Read first — write/edit/delete require it"
+                              : undefined
+                          }
+                          className="w-4 h-4 rounded border-outline-variant/40 text-primary
+                            focus:ring-2 focus:ring-primary/30 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        />
+                      </td>
+                    ))}
                   </tr>
                 );
               })}
@@ -166,7 +196,7 @@ export default function RolePermissionsPanel() {
         {/* Footer / save bar */}
         <div className="px-6 py-4 bg-surface-container-low/50 border-t border-outline-variant/10 flex items-center justify-between">
           <p className="text-body-sm text-secondary">
-            {activeRole === "ADMIN"
+            {isAdminRole
               ? "Admin always has full access across all modules."
               : dirty
               ? "You have unsaved changes."
@@ -174,7 +204,7 @@ export default function RolePermissionsPanel() {
           </p>
           <button
             onClick={handleSave}
-            disabled={activeRole === "ADMIN" || roleMissing || !dirty || saving}
+            disabled={isAdminRole || roleMissing || !dirty || saving}
             className="flex items-center gap-2 px-4 py-2.5 bg-primary text-on-primary
               rounded-lg text-body-md font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
