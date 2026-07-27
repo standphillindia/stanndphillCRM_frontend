@@ -32,13 +32,11 @@ const ROLE_CONFIG: Record<
   UserRole,
   { bg: string; text: string; border: string; label: string }
 > = {
-  ADMIN:     { bg: "bg-tertiary/10",   text: "text-tertiary",    border: "border-tertiary/20",    label: "Admin" },
-  MANAGER:   { bg: "bg-primary/10",    text: "text-primary",     border: "border-primary/20",     label: "Manager" },
-  ENGINEER:  { bg: "bg-purple-500/10", text: "text-purple-700",  border: "border-purple-500/20",  label: "Engineer" },
-  SALES:     { bg: "bg-amber-500/10",  text: "text-amber-700",   border: "border-amber-500/20",   label: "Sales" },
-  SUPPORT:   { bg: "bg-green-500/10",  text: "text-green-700",   border: "border-green-500/20",   label: "Support" },
-  ACCOUNTANT: { bg: "bg-blue-500/10",   text: "text-blue-700",    border: "border-blue-500/20",    label: "Accountant" },
-  FINANCE:   { bg: "bg-indigo-500/10", text: "text-indigo-700",  border: "border-indigo-500/20",  label: "Finance" },
+  ADMIN:      { bg: "bg-tertiary/10",   text: "text-tertiary",    border: "border-tertiary/20",    label: "Admin" },
+  ENGINEER:   { bg: "bg-purple-500/10", text: "text-purple-700",  border: "border-purple-500/20",  label: "Engineer" },
+  SALES:      { bg: "bg-amber-500/10",  text: "text-amber-700",   border: "border-amber-500/20",   label: "Sales" },
+  FINANCE:    { bg: "bg-indigo-500/10", text: "text-indigo-700",  border: "border-indigo-500/20",  label: "Finance" },
+  OPERATIONS: { bg: "bg-green-500/10",  text: "text-green-700",   border: "border-green-500/20",   label: "Operations" },
 };
 
 const STATUS_CONFIG: Record<

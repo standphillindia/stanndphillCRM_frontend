@@ -127,7 +127,7 @@ let mockUsers: UserResponse[] = [
     fullName: "Sneha Gupta",
     email: "sneha@standphill.com",
     phone: "9911223344",
-    role: "SUPPORT",
+    role: "OPERATIONS",
     team: "OpsB",
     status: "INACTIVE",
     createdAt: "2026-03-05T09:00:00.000Z",
@@ -159,7 +159,7 @@ const mapBackendUser = (u: BackendUserResponse): UserResponse => ({
   id: u.id,
   fullName: u.fullName,
   email: u.email,
-  role: (u.roleName as UserRole) ?? "SUPPORT",
+  role: (u.roleName as UserRole) ?? "OPERATIONS",
   team: u.teamName,
   department: u.departmentName,
   status: u.active ? "ACTIVE" : "INVITED",
@@ -354,8 +354,8 @@ export const fetchUserAssignedCounts = async (
     const base = user.role === "SALES" ? 8 : user.role === "ENGINEER" ? 3 : 5;
     return {
       leads: user.role === "SALES" ? base : Math.max(0, base - 4),
-      deals: user.role === "SALES" || user.role === "MANAGER" ? base - 2 : 0,
-      projects: user.role === "ENGINEER" || user.role === "MANAGER" ? base : 1,
+      deals: user.role === "SALES" || user.role === "OPERATIONS" ? base - 2 : 0,
+      projects: user.role === "ENGINEER" || user.role === "OPERATIONS" ? base : 1,
     };
   }
 
