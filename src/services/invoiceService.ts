@@ -290,6 +290,7 @@ export interface InvoiceDetailsResponse {
   sentDate?: string;
   remarks?: string;
   pdfAvailable: boolean;
+  signatoryName?: string;
   items: InvoiceItemResponse[];
 }
 
@@ -344,6 +345,9 @@ export const createAmcInvoice = async (
     // existing PI right at creation, so its payment status mirrors that
     // PI's instead of showing dashes.
     sourcePiId?: string;
+    // Optional manual override — leave blank to auto-generate PI-YYYY-NNNN.
+    invoiceNumber?: string;
+    signatoryName?: string;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {
@@ -397,6 +401,8 @@ export const updateAmcInvoiceDetails = async (
     taxAmount?: number;
     totalAmount?: number;
     items?: InvoiceLineItemRequest[];
+    invoiceNumber?: string;
+    signatoryName?: string;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.patch<InvoiceDetailsResponse>(
@@ -514,6 +520,8 @@ export const createProjectInvoice = async (
     // Only meaningful when invoiceType="TAX" — link this TI to an
     // existing PI right at creation.
     sourcePiId?: string;
+    invoiceNumber?: string;
+    signatoryName?: string;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {
