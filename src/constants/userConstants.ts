@@ -19,25 +19,24 @@ export const USER_STATUSES = [
 
 export type UserStatus = (typeof USER_STATUSES)[number]["value"];
 
+// Must match team names that already exist in the backend `teams` table
+// (teamRepository.findByName lookup fails otherwise).
 export const USER_TEAMS = [
-  { value: "OpsA", label: "OpsA" },
-  { value: "OpsB", label: "OpsB" },
-  { value: "Sales", label: "Sales" },
-  { value: "Finance", label: "Finance" },
-  { value: "Management", label: "Management" },
-  { value: "Engineering", label: "Engineering" },
   { value: "AMC", label: "AMC" },
+  { value: "Engineer", label: "Engineer" },
+  { value: "Finance", label: "Finance" },
+  { value: "Operations", label: "Operations" },
+  { value: "Sales", label: "Sales" },
 ] as const;
 
 // Must match department names that already exist in the backend
 // (departmentRepository.findByName lookup fails otherwise).
 export const USER_DEPARTMENTS = [
-  { value: "Operations", label: "Operations" },
-  { value: "Engineering", label: "Engineering" },
-  { value: "Finance", label: "Finance" },
-  { value: "Sales", label: "Sales" },
-  { value: "Management", label: "Management" },
   { value: "AMC", label: "AMC" },
+  { value: "Engineer", label: "Engineer" },
+  { value: "Finance", label: "Finance" },
+  { value: "Operations", label: "Operations" },
+  { value: "Sales", label: "Sales" },
 ] as const;
 
 export type UserDepartment = (typeof USER_DEPARTMENTS)[number]["value"];

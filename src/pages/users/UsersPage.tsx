@@ -82,7 +82,7 @@ const EMPTY_FORM: CreateUserRequest = {
   password: "",
   phone: "",
   role: "ENGINEER",
-  team: "OpsA",
+  team: "Engineer",
   department: "Operations",
 };
 
@@ -230,7 +230,7 @@ export default function UsersPage() {
       email: user.email,
       phone: user.phone ?? "",
       role: user.role,
-      team: user.team ?? "OpsA",
+      team: user.team ?? "Engineer",
       department: user.department ?? "Operations",
     });
     setEditError(null);
