@@ -10,6 +10,7 @@ import {
   getNotificationLabel,
   getNotificationColor,
   getNotificationIcon,
+  getNotificationLink,
   type NotificationResponse,
 } from "../../services/notificationservice";
 
@@ -163,10 +164,16 @@ export default function NotificationsPage() {
     const colors = getNotificationColor(notif.type);
     const label = getNotificationLabel(notif.type);
     const icon = getNotificationIcon(notif.type);
+    const link = getNotificationLink(notif.type, notif.referenceType, notif.referenceId);
+
+    const handleClick = () => {
+      if (!notif.read) handleMarkRead(notif.id);
+      if (link) navigate(link);
+    };
 
     return (
       <div
-        onClick={() => !notif.read && handleMarkRead(notif.id)}
+        onClick={handleClick}
         style={{
           padding: "14px 16px",
           borderBottom: !isLast ? "0.5px solid #f3f4f6" : "none",
@@ -174,7 +181,7 @@ export default function NotificationsPage() {
           display: "flex",
           gap: "12px",
           alignItems: "flex-start",
-          cursor: notif.read ? "default" : "pointer",
+          cursor: link ? "pointer" : "default",
           transition: "all 0.15s ease",
         }}
         onMouseEnter={(e) => {

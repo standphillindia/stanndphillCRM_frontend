@@ -225,6 +225,14 @@ export const reauthorizeStageAccess = async (
   return res.data;
 };
 
+// ── Admin: manually run the daily LATE-detection + access-lock sweep,
+// instead of waiting for the 1:30 AM cron. Useful right after a deploy,
+// or while testing locally where the backend isn't running 24/7. ──────
+export const runLateCheckNow = async (): Promise<{ flaggedCount: number }> => {
+  const res = await api.post<{ flaggedCount: number }>("/admin/run-late-check", {});
+  return res.data;
+};
+
 // ── Admin: every project currently flagged delayed ────────────────────
 export const fetchDelayedProjects = async (): Promise<
   { id: string; projectName: string; isDelayed: boolean; stage: string }[]

@@ -23,6 +23,12 @@ export interface LeadResponse {
   assignedToEmail: string;
   createdAt?: string;
   nextFollowUpDate?: string | null;
+  piAccessLocked: boolean;
+  piReauthorizationRequestReason: string | null;
+  piReauthorizationRequestedAt: string | null;
+  tiAccessLocked: boolean;
+  tiReauthorizationRequestReason: string | null;
+  tiReauthorizationRequestedAt: string | null;
 }
 
 export interface CreateLeadRequest {
@@ -110,6 +116,32 @@ export const fetchLeadById = async (
     `/leads/get/${id}`
   );
 
+  return res.data;
+};
+
+// ── PI/TI access-lock — employee requests / Admin reauthorizes ────────
+// which = "PI" or "TI"
+export const requestLeadReauthorization = async (
+  leadId: string,
+  which: "PI" | "TI",
+  reason: string
+): Promise<LeadResponse> => {
+  const res = await api.post<LeadResponse>(
+    `/leads/${leadId}/${which}/request-reauthorization`,
+    { reason }
+  );
+  return res.data;
+};
+
+export const reauthorizeLeadFinanceAccess = async (
+  leadId: string,
+  which: "PI" | "TI",
+  reason?: string
+): Promise<LeadResponse> => {
+  const res = await api.post<LeadResponse>(
+    `/leads/admin/${leadId}/${which}/reauthorize`,
+    { reason }
+  );
   return res.data;
 };
 

@@ -18,14 +18,21 @@ import {
   failEngineerVisit,
   uploadVisitPhoto,
   parseEngineerVisitState,
+  runLateCheckNow,
   type StageTrackerResponse,
 } from "../../services/projectStageService";
 import { useToast } from "../../context/ToastContext";
+import { useAuth } from "../../context/AuthContext";
+import { getRoleFromToken } from "../../utils/jwt";
 
 export default function MyTasksPage() {
   const { addToast } = useToast();
   const showToast = (message: string, type: "success" | "error" = "success") =>
     addToast({ title: type === "error" ? "Error" : "Success", message, type });
+
+  const { token } = useAuth();
+  const isAdmin = getRoleFromToken(token) === "ADMIN";
+  const [checkingNow, setCheckingNow] = useState(false);
 
   const [tasks, setTasks] = useState<StageTrackerResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +68,23 @@ export default function MyTasksPage() {
   useEffect(() => {
     load();
   }, []);
+
+  const handleCheckNow = async () => {
+    setCheckingNow(true);
+    try {
+      const { flaggedCount } = await runLateCheckNow();
+      showToast(
+        flaggedCount > 0
+          ? `Late-check ran — ${flaggedCount} stage(s) flagged/locked.`
+          : "Late-check ran — nothing new to flag."
+      );
+      await load();
+    } catch (err: any) {
+      showToast(err?.response?.data?.message ?? "Could not run the late-check.", "error");
+    } finally {
+      setCheckingNow(false);
+    }
+  };
 
   const handleComplete = async (task: StageTrackerResponse) => {
     if (task.stageCode === "AUDIT_SCHEDULE") {
@@ -188,9 +212,21 @@ export default function MyTasksPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">My Tasks</h1>
-        <p className="text-gray-500">Stage-tracker items currently on your department, across all projects.</p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold">My Tasks</h1>
+          <p className="text-gray-500">Stage-tracker items currently on your department, across all projects.</p>
+        </div>
+        {isAdmin && (
+          <button
+            onClick={handleCheckNow}
+            disabled={checkingNow}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 flex-shrink-0"
+            title="Manually run the daily LATE-detection + access-lock sweep, instead of waiting for the 1:30 AM cron"
+          >
+            {checkingNow ? "Checking…" : "🔄 Check Now (run late-check)"}
+          </button>
+        )}
       </div>
 
       {tasks.length === 0 && (

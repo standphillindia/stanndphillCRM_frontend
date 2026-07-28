@@ -9,6 +9,8 @@ import { logoutUser } from "../services/authService";
 import { fetchMyModules } from "../services/permissionService";
 import logo from "../assets/logo.png";
 import NotificationBell from "../pages/Notification/Notoficationbell";
+import { useAuth } from "../context/AuthContext";
+import { getRoleFromToken } from "../utils/jwt";
 
 // ── Nav items (matches AppRouter routes + design reference icons) ─────────────
 interface NavItemConfig {
@@ -168,6 +170,8 @@ function SidebarContent({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { token } = useAuth();
+  const isAdmin = getRoleFromToken(token) === "ADMIN";
   const [loggingOut, setLoggingOut] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
@@ -366,28 +370,32 @@ function SidebarContent({
 
       {/* ── User card + logout ─────────────────────────────────────────────── */}
       <div className="p-4 mt-auto border-t border-outline-variant/10 space-y-2">
-        {/* User card — click to open Admin Panel */}
-        <button
-          onClick={() => navigate("/admin")}
-          className={`w-full glass-card rounded-xl p-3 flex items-center gap-3 text-left
-            transition-colors hover:bg-primary/5 cursor-pointer
-            ${isActive("/admin") ? "ring-2 ring-primary/30 bg-primary/5" : ""}`}
-        >
-          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            <span className="text-[13px] font-bold text-primary">A</span>
-          </div>
-          <div className="overflow-hidden flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-on-surface truncate leading-tight">
-              Admin
-            </p>
-            <p className="text-[11px] text-secondary truncate leading-tight mt-0.5">
-              Standphill CRM
-            </p>
-          </div>
-          <span className="material-symbols-outlined text-[18px] text-outline shrink-0">
-            admin_panel_settings
-          </span>
-        </button>
+        {/* User card — click to open Admin Panel. Admin-only: it's a
+            shortcut into the Admin Panel, not a personal profile card, so
+            other roles shouldn't see it at all. */}
+        {isAdmin && (
+          <button
+            onClick={() => navigate("/admin")}
+            className={`w-full glass-card rounded-xl p-3 flex items-center gap-3 text-left
+              transition-colors hover:bg-primary/5 cursor-pointer
+              ${isActive("/admin") ? "ring-2 ring-primary/30 bg-primary/5" : ""}`}
+          >
+            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <span className="text-[13px] font-bold text-primary">A</span>
+            </div>
+            <div className="overflow-hidden flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-on-surface truncate leading-tight">
+                Admin
+              </p>
+              <p className="text-[11px] text-secondary truncate leading-tight mt-0.5">
+                Standphill CRM
+              </p>
+            </div>
+            <span className="material-symbols-outlined text-[18px] text-outline shrink-0">
+              admin_panel_settings
+            </span>
+          </button>
+        )}
 
         {/* Sign out */}
         <button
