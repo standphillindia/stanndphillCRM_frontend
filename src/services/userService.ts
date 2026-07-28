@@ -316,14 +316,8 @@ export const resetUserPassword = async (
 // DELETE /api/users/{id}
 // ─────────────────────────────────────────────────────────────
 export const deleteUser = async (id: string): Promise<void> => {
-  if (USE_MOCK_DATA) {
-    await delay();
-    mockUsers = mockUsers.filter((u) => u.id !== id);
-    return;
-  }
-
-  // await api.delete(`/users/${id}`);
-  throw new Error("Real DELETE /api/users/{id} endpoint not implemented yet");
+  // Always hits the real backend — same pattern as createUser/toggleUserStatus.
+  await api.delete(`/org/users/${id}`);
 };
 
 // ─────────────────────────────────────────────────────────────

@@ -174,6 +174,7 @@ export default function UsersPage() {
   // Delete confirm
   const [deleteId,      setDeleteId]      = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError,   setDeleteError]   = useState<string | null>(null);
 
   // ── Reset password modal ──────────────────────────────────────────────────
   const [resetPasswordUser, setResetPasswordUser] = useState<UserResponse | null>(null);
@@ -253,9 +254,17 @@ export default function UsersPage() {
   const handleDelete = async () => {
     if (!deleteId) return;
     setDeleteLoading(true);
-    try { await deleteUser(deleteId); setDeleteId(null); loadUsers(); }
-    catch { /* ignore */ }
-    finally { setDeleteLoading(false); }
+    setDeleteError(null);
+    try {
+      await deleteUser(deleteId);
+      setDeleteId(null);
+      loadUsers();
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      setDeleteError(err?.message ?? "Failed to delete user.");
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   // ── Reset password ────────────────────────────────────────────────────────
@@ -573,7 +582,7 @@ export default function UsersPage() {
                             <span className="material-symbols-outlined text-[18px]">edit</span>
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); setDeleteId(user.id); }}
+                            onClick={(e) => { e.stopPropagation(); setDeleteId(user.id); setDeleteError(null); }}
                             title="Delete"
                             className="p-2 rounded-lg hover:bg-error/10 text-error transition-colors"
                           >
@@ -862,7 +871,7 @@ export default function UsersPage() {
       {deleteId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-          onClick={() => setDeleteId(null)}
+          onClick={() => { setDeleteId(null); setDeleteError(null); }}
         >
           <div
             className="glass-card w-full max-w-sm rounded-xl p-8 text-center shadow-2xl"
@@ -878,9 +887,18 @@ export default function UsersPage() {
             </div>
             <h3 className="text-headline-md font-semibold text-on-surface mb-2">Delete this user?</h3>
             <p className="text-body-md text-secondary mb-6">This action cannot be undone.</p>
+
+            {deleteError && (
+              <div className="flex items-start gap-2 px-4 py-3 mb-4 bg-error-container/40
+                border border-error/20 rounded-lg text-body-sm text-error text-left">
+                <span className="material-symbols-outlined text-[16px] shrink-0 mt-0.5">error</span>
+                {deleteError}
+              </div>
+            )}
+
             <div className="flex justify-center gap-3">
               <button
-                onClick={() => setDeleteId(null)}
+                onClick={() => { setDeleteId(null); setDeleteError(null); }}
                 className="px-4 py-2.5 bg-surface-container-highest border border-outline-variant
                   text-on-surface rounded-lg text-body-md font-medium hover:bg-surface-variant transition-all"
               >
