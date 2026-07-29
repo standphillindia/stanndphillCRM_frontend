@@ -210,6 +210,12 @@ export default function LeadsPage() {
 
   // ── FOLLOW UP Modal State (unchanged — table's status flow) ──────────────
   const [followUpLead, setFollowUpLead] = useState<LeadResponse | null>(null);
+
+  // ── Take-ownership popup — NEW -> CONTACTED on an unassigned lead ────
+  const [contactLead, setContactLead] = useState<LeadResponse | null>(null);
+  const [assignEmailInput, setAssignEmailInput] = useState("");
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [assignLoading, setAssignLoading] = useState(false);
   const [followUpDateInput, setFollowUpDateInput] = useState("");
   const [followUpError, setFollowUpError] = useState<string | null>(null);
   const [followUpLoading, setFollowUpLoading] = useState(false);
@@ -394,6 +400,35 @@ export default function LeadsPage() {
       setWonError(err?.response?.data?.message ?? err?.message ?? "Failed to mark lead as won.");
     } finally {
       setWonLoading(false);
+    }
+  };
+
+  // ── Take-ownership Submit — NEW -> CONTACTED, first person to touch it ──
+  const handleAssignSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!contactLead) return;
+    if (!assignEmailInput.trim()) { setAssignError("Please enter your email."); return; }
+
+    setAssignLoading(true);
+    setAssignError(null);
+
+    try {
+      await transitionLead(contactLead.id, {
+        targetStatus: "CONTACTED",
+        assignedToEmail: assignEmailInput.trim(),
+      });
+
+      setContactLead(null);
+      setAssignEmailInput("");
+
+      loadLeads(page);
+
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      setAssignError(err?.response?.data?.message ?? err?.message ?? "Failed to assign this lead.");
+    } finally {
+      setAssignLoading(false);
     }
   };
 
@@ -660,6 +695,17 @@ export default function LeadsPage() {
                                 setWonLead(lead);
                                 setWonForm({ amount: "", expectedCloseDate: "", notes: "", assignedEngineerId: "", departmentId: "", opsPersonId: "" });
                                 setWonError(null);
+                                return;
+                              }
+
+                              if (
+                                status === "CONTACTED" &&
+                                lead.status === "NEW" &&
+                                (!lead.assignedToEmail || lead.assignedToEmail === "Unassigned")
+                              ) {
+                                setContactLead(lead);
+                                setAssignEmailInput("");
+                                setAssignError(null);
                                 return;
                               }
 
@@ -1130,6 +1176,78 @@ export default function LeadsPage() {
       )}
 
       {/* ── FOLLOW UP Modal (unchanged — table's status flow) ─────────────── */}
+      {contactLead && (
+        <Modal onClose={() => setContactLead(null)}>
+          <div className="px-6 pt-6 pb-2 border-b border-outline-variant/10 flex items-center justify-between">
+            <div>
+              <h2 className="text-headline-md font-semibold text-on-surface">Take Ownership</h2>
+              <p className="text-body-sm text-secondary mt-0.5">{contactLead.companyName}</p>
+            </div>
+            <button
+              onClick={() => setContactLead(null)}
+              className="p-2 rounded-full hover:bg-surface-container-high text-secondary transition-colors"
+            >
+              <span className="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+
+          <form onSubmit={handleAssignSubmit} className="p-6 space-y-5">
+            <p className="text-body-sm text-secondary">
+              Is lead ko abhi tak koi kaam nahi kar raha. Apna email daalo — ye lead tumhare
+              naam assign ho jayega aur status "Contacted" ho jayega.
+            </p>
+
+            <Field label="Your Email" icon="mail">
+              <input
+                type="email"
+                required
+                placeholder="you@standphill.com"
+                value={assignEmailInput}
+                onChange={(e) => setAssignEmailInput(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+
+            {assignError && (
+              <div className="flex items-center gap-2 px-4 py-3 bg-error-container/40
+                border border-error/20 rounded-lg text-body-sm text-error">
+                <span className="material-symbols-outlined text-[16px]">error</span>
+                {assignError}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-outline-variant/10">
+              <button
+                type="button"
+                onClick={() => setContactLead(null)}
+                className="px-4 py-2.5 bg-surface-container-highest border border-outline-variant
+                  text-on-surface rounded-lg text-body-md font-medium hover:bg-surface-variant transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={assignLoading}
+                className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white
+                  rounded-lg text-body-md font-semibold hover:opacity-90 disabled:opacity-60 transition-all"
+              >
+                {assignLoading ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                    Assign to me
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
       {followUpLead && (
         <Modal onClose={() => setFollowUpLead(null)}>
           <div className="px-6 pt-6 pb-2 border-b border-outline-variant/10 flex items-center justify-between">

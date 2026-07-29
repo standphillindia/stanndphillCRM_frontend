@@ -4,6 +4,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import ProtectedRoute from "../components/ProtectedRoute";
+import AdminRoute from "../components/AdminRoute";
 import MainLayout from "../layouts/main-layouts";
 
 // Page imports
@@ -74,7 +75,7 @@ export default function AppRouter() {
           <Route path="/certifications" element={<CertificationsPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/amc/*" element={<AmcPage />} />
-          <Route path="/admin" element={<AdminPanelPage />} />
+          <Route path="/admin" element={<AdminRoute><AdminPanelPage /></AdminRoute>} />
         </Route>
 
         {/* ── Fallbacks ──────────────────────────────────────── */}

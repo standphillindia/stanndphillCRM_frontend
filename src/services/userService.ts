@@ -85,6 +85,28 @@ export interface UserAssignedCounts {
   projects: number;
 }
 
+// GET /api/org/users/{id}/performance — powers the "Performance" block
+// on the User Profile drawer. All four sub-blocks always come back;
+// UserProfileDrawer picks which one(s) to render based on department.
+export interface CountBreakdown {
+  total: number;
+  won: number;
+  lost: number;
+}
+
+export interface ProjectBreakdown {
+  total: number;
+  onTime: number;
+  late: number;
+}
+
+export interface UserPerformanceResponse {
+  leads: CountBreakdown;         // Sales / Marketing
+  financeTasks: CountBreakdown;  // Finance
+  engineerTasks: CountBreakdown; // Engineering
+  projects: ProjectBreakdown;    // Operations
+}
+
 // ─────────────────────────────────────────────────────────────
 // MOCK DATA STORE (in-memory, resets on page refresh)
 // ─────────────────────────────────────────────────────────────
@@ -356,4 +378,16 @@ export const fetchUserAssignedCounts = async (
   // const res = await api.get<UserAssignedCounts>(`/users/${id}/assigned-counts`);
   // return res.data;
   throw new Error("Real /api/users/{id}/assigned-counts endpoint not implemented yet");
+};
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/org/users/{id}/performance — real endpoint, always live
+// (not behind USE_MOCK_DATA — the mock store doesn't have enough data
+// to fake this meaningfully, and this is an Admin-only screen anyway).
+// ─────────────────────────────────────────────────────────────
+export const fetchUserPerformance = async (
+  id: string
+): Promise<UserPerformanceResponse> => {
+  const res = await api.get<UserPerformanceResponse>(`/org/users/${id}/performance`);
+  return res.data;
 };

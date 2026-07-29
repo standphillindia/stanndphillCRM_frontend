@@ -196,6 +196,10 @@ export const transitionLead = async (
     // NEW — only meaningful for targetStatus="FOLLOW_UP". Date picked on
     // the follow-up popup, sent along with the transition.
     nextFollowUpDate?: string;
+    // NEW — only meaningful when moving NEW -> CONTACTED on a lead with
+    // no owner yet. The popup asks the employee for their own email —
+    // that's who the lead gets assigned to.
+    assignedToEmail?: string;
   }
 ): Promise<LeadResponse> => {
   const res = await api.patch<LeadResponse>(

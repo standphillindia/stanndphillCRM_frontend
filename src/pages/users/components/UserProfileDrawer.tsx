@@ -4,10 +4,10 @@
 import { useEffect, useState } from "react";
 import {
   fetchUserActivity,
-  fetchUserAssignedCounts,
+  fetchUserPerformance,
   type UserResponse,
   type UserActivityEntry,
-  type UserAssignedCounts,
+  type UserPerformanceResponse,
 } from "../../../services/userService";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -36,17 +36,17 @@ interface UserProfileDrawerProps {
 
 export default function UserProfileDrawer({ user, onClose, onEdit }: UserProfileDrawerProps) {
   const [activity, setActivity] = useState<UserActivityEntry[]>([]);
-  const [counts, setCounts]     = useState<UserAssignedCounts | null>(null);
+  const [performance, setPerformance] = useState<UserPerformanceResponse | null>(null);
   const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([fetchUserActivity(user.id), fetchUserAssignedCounts(user.id)])
-      .then(([a, c]) => {
+    Promise.allSettled([fetchUserActivity(user.id), fetchUserPerformance(user.id)])
+      .then(([a, p]) => {
         if (cancelled) return;
-        setActivity(a);
-        setCounts(c);
+        setActivity(a.status === "fulfilled" ? a.value : []);
+        setPerformance(p.status === "fulfilled" ? p.value : null);
       })
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
@@ -119,23 +119,72 @@ export default function UserProfileDrawer({ user, onClose, onEdit }: UserProfile
             </div>
           </div>
 
-          {/* Assigned counts */}
+          {/* Performance — department-specific breakdown */}
           <div>
-            <p className="text-label-caps text-outline uppercase mb-2">Assigned</p>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: "Leads",    value: counts?.leads },
-                { label: "Deals",    value: counts?.deals },
-                { label: "Projects", value: counts?.projects },
-              ].map((s) => (
-                <div key={s.label} className="glass-card rounded-lg p-3 text-center">
-                  <p className="text-headline-md font-bold text-primary">
-                    {loading ? "—" : s.value}
+            <p className="text-label-caps text-outline uppercase mb-2">Performance</p>
+            {(() => {
+              const dept = `${user.department ?? ""} ${user.team ?? ""}`.toLowerCase();
+              const showLeads    = dept.includes("market") || dept.includes("sales");
+              const showFinance  = dept.includes("finance");
+              const showEngineer = dept.includes("engineer");
+              const showOps      = dept.includes("operation");
+              const showAny = showLeads || showFinance || showEngineer || showOps;
+
+              if (!showAny) {
+                return (
+                  <p className="text-body-sm text-secondary">
+                    No department-specific performance tracked for this role.
                   </p>
-                  <p className="text-body-sm text-secondary mt-0.5">{s.label}</p>
+                );
+              }
+
+              const countCards = (label: string, b?: { total: number; won: number; lost: number }) => (
+                <div key={label} className="mb-3">
+                  <p className="text-body-sm font-medium text-on-surface mb-2">{label}</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { l: "Total", v: b?.total, cls: "text-primary" },
+                      { l: "Won",   v: b?.won,   cls: "text-emerald-600" },
+                      { l: "Lost",  v: b?.lost,  cls: "text-error" },
+                    ].map((s) => (
+                      <div key={s.l} className="glass-card rounded-lg p-3 text-center">
+                        <p className={`text-headline-md font-bold ${s.cls}`}>
+                          {loading ? "—" : (s.v ?? 0)}
+                        </p>
+                        <p className="text-body-sm text-secondary mt-0.5">{s.l}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+
+              return (
+                <>
+                  {showLeads && countCards("Leads (Sales)", performance?.leads)}
+                  {showFinance && countCards("Finance Tasks", performance?.financeTasks)}
+                  {showEngineer && countCards("Engineering Tasks", performance?.engineerTasks)}
+                  {showOps && (
+                    <div>
+                      <p className="text-body-sm font-medium text-on-surface mb-2">Projects (Operations)</p>
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { l: "Total",    v: performance?.projects.total,  cls: "text-primary" },
+                          { l: "On Time",  v: performance?.projects.onTime, cls: "text-emerald-600" },
+                          { l: "Late",     v: performance?.projects.late,   cls: "text-error" },
+                        ].map((s) => (
+                          <div key={s.l} className="glass-card rounded-lg p-3 text-center">
+                            <p className={`text-headline-md font-bold ${s.cls}`}>
+                              {loading ? "—" : (s.v ?? 0)}
+                            </p>
+                            <p className="text-body-sm text-secondary mt-0.5">{s.l}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           {/* Activity log */}
