@@ -115,7 +115,6 @@ const FORM_FIELDS = [
   { name: "phone",             label: "Phone",              type: "tel",   placeholder: "9876543210",            icon: "call"            },
   { name: "product",           label: "Product",            type: "text",  placeholder: "ISO 9001",              icon: "inventory_2"     },
   { name: "certificationType", label: "Certification Type", type: "text",  placeholder: "ISO",                   icon: "verified"        },
-  { name: "assignedToEmail",   label: "Assign To (Email)", type: "email", placeholder: "admin@standphill.com",  icon: "manage_accounts" },
 ] as const;
 
 // ── Skeleton row ──────────────────────────────────────────────────────────────
@@ -200,12 +199,19 @@ export default function LeadsPage() {
   const [departments, setDepartments] = useState<DepartmentResponse[]>([]);
   const [opsUsers, setOpsUsers] = useState<OrgUserResponse[]>([]);
 
+  // Sales users for the "Assign To" dropdown on New Lead / Edit Lead —
+  // fetched from whichever backend this build points at (local DB while
+  // developing, live Neon DB once deployed), so this needs zero changes
+  // when pushed live — it always reflects real, current Sales users.
+  const [salesUsers, setSalesUsers] = useState<OrgUserResponse[]>([]);
+
   useEffect(() => {
     fetchUsers({ role: "ENGINEER" }).then(setEngineers).catch(() => setEngineers([]));
     // Ops person dropdown for the WON review — every user works; Admin
     // typically picks someone from Operations.
     fetchUsers({}).then(setOpsUsers).catch(() => setOpsUsers([]));
     fetchDepartments().then(setDepartments).catch(() => setDepartments([]));
+    fetchUsers({ role: "SALES" }).then(setSalesUsers).catch(() => setSalesUsers([]));
   }, []);
 
   // ── FOLLOW UP Modal State (unchanged — table's status flow) ──────────────
@@ -902,6 +908,21 @@ export default function LeadsPage() {
                   ))}
                 </select>
               </Field>
+              <Field label="Assign To" icon="manage_accounts">
+                <select
+                  required
+                  value={addForm.assignedToEmail}
+                  onChange={(e) => setAddForm((prev) => ({ ...prev, assignedToEmail: e.target.value }))}
+                  className={inputCls}
+                >
+                  <option value="" disabled>
+                    {salesUsers.length === 0 ? "No Sales users found" : "Select a Sales user"}
+                  </option>
+                  {salesUsers.map((u) => (
+                    <option key={u.id} value={u.email}>{u.fullName} ({u.email})</option>
+                  ))}
+                </select>
+              </Field>
             </div>
 
             {addError && (
@@ -985,6 +1006,21 @@ export default function LeadsPage() {
                 >
                   {LEAD_SOURCES.map((s) => (
                     <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Assign To" icon="manage_accounts">
+                <select
+                  required
+                  value={editForm.assignedToEmail}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, assignedToEmail: e.target.value }))}
+                  className={inputCls}
+                >
+                  <option value="" disabled>
+                    {salesUsers.length === 0 ? "No Sales users found" : "Select a Sales user"}
+                  </option>
+                  {salesUsers.map((u) => (
+                    <option key={u.id} value={u.email}>{u.fullName} ({u.email})</option>
                   ))}
                 </select>
               </Field>

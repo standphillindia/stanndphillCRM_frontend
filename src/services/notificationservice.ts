@@ -27,6 +27,7 @@ export type NotificationType =
   | "DEAL_STAGE_CHANGED"
   | "PROJECT_CREATED"
   | "PROJECT_STAGE_CHANGED"
+  | "STAGE_DUE_REMINDER"
   | "CERTIFICATION_CREATED"
   | "AMC_CREATED"
   | "AMC_ACTIVATED"
@@ -165,6 +166,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   // Reused for every stage-progress notification, not just closing — a
   // literal "Project Closed" label here was misleading on ~everything else.
   PROJECT_STAGE_CHANGED: "Project Update",
+  STAGE_DUE_REMINDER: "Due Reminder",
   CERTIFICATION_CREATED: "Certification Added",
   AMC_CREATED: "AMC Created",
   AMC_ACTIVATED: "AMC Activated",
@@ -203,6 +205,7 @@ export const NOTIFICATION_TYPE_COLORS: Record<NotificationType, { bg: string; co
   DEAL_STAGE_CHANGED: { bg: "#fef3c7", color: "#d97706" },
   PROJECT_CREATED: { bg: "#d1fae5", color: "#059669" },
   PROJECT_STAGE_CHANGED: { bg: "#d1fae5", color: "#059669" },
+  STAGE_DUE_REMINDER: { bg: "#fef3c7", color: "#d97706" },
   CERTIFICATION_CREATED: { bg: "#fef3c7", color: "#d97706" },
   AMC_CREATED: { bg: "#d1fae5", color: "#059669" },
   AMC_ACTIVATED: { bg: "#d1fae5", color: "#059669" },
@@ -241,6 +244,7 @@ export const NOTIFICATION_TYPE_ICONS: Record<NotificationType, string> = {
   DEAL_STAGE_CHANGED: "📈",
   PROJECT_CREATED: "🚀",
   PROJECT_STAGE_CHANGED: "✅",
+  STAGE_DUE_REMINDER: "⏰",
   CERTIFICATION_CREATED: "🎓",
   AMC_CREATED: "🛡️",
   AMC_ACTIVATED: "🛡️",
@@ -312,6 +316,7 @@ export const getNotificationLink = (
     // Project — creation, stage progress, delays, site visits.
     case "PROJECT_CREATED":
     case "PROJECT_STAGE_CHANGED":
+    case "STAGE_DUE_REMINDER":
     case "PROJECT_DELAYED":
     case "VISIT_ASSIGNED":
     case "VISIT_TOMORROW":

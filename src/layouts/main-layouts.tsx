@@ -56,11 +56,6 @@ const NAV_ITEMS: NavItemConfig[] = [
     module: "PROJECTS",
   },
   {
-    path: "/tasks",
-    label: "Tasks",
-    icon: "checklist",
-  },
-  {
     path: "/my-tasks",
     label: "My Tasks",
     icon: "task_alt",

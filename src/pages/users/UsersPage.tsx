@@ -26,6 +26,21 @@ import {
 import UserProfileDrawer from "./components/UserProfileDrawer";
 import RolePermissionsPanel from "./components/RolePermissionsPanel";
 
+// ── Role → Department default mapping ───────────────────────────────────────
+// Role and Department are stored as separate fields/dropdowns with no DB-level
+// link between them, which is what let a user get saved with Role=ENGINEER but
+// Department=Operations (the two selects were never kept in sync). This map
+// is used to auto-fill Department whenever Role changes, so the common case
+// requires zero extra clicks — Admin can still override Department manually
+// afterwards for any edge case (e.g. an Engineer temporarily on the AMC team).
+const ROLE_TO_DEPARTMENT: Record<UserRole, string> = {
+  ADMIN:      "Operations",
+  ENGINEER:   "Engineer",
+  SALES:      "Sales",
+  FINANCE:    "Finance",
+  OPERATIONS: "Operations",
+};
+
 // ── Role badge config 
 
 const ROLE_CONFIG: Record<
@@ -83,7 +98,7 @@ const EMPTY_FORM: CreateUserRequest = {
   phone: "",
   role: "ENGINEER",
   team: "Engineer",
-  department: "Operations",
+  department: ROLE_TO_DEPARTMENT.ENGINEER, // "Engineer" — was hardcoded "Operations", mismatched the default role above
 };
 
 // ── Modal wrapper ──────────────────────────────────────────────────────────────
@@ -232,7 +247,7 @@ export default function UsersPage() {
       phone: user.phone ?? "",
       role: user.role,
       team: user.team ?? "Engineer",
-      department: user.department ?? "Operations",
+      department: user.department ?? ROLE_TO_DEPARTMENT[user.role],
     });
     setEditError(null);
   };
@@ -685,7 +700,13 @@ export default function UsersPage() {
                 <select
                   required
                   value={addForm.role}
-                  onChange={(e) => setAddForm((prev) => ({ ...prev, role: e.target.value as UserRole }))}
+                  onChange={(e) => {
+                    const newRole = e.target.value as UserRole;
+                    // Auto-fill Department to match the new Role so the two
+                    // fields never silently drift apart. Admin can still
+                    // change Department manually right after, if needed.
+                    setAddForm((prev) => ({ ...prev, role: newRole, department: ROLE_TO_DEPARTMENT[newRole] }));
+                  }}
                   className={inputCls}
                 >
                   {USER_ROLES.map((r) => (
@@ -715,6 +736,9 @@ export default function UsersPage() {
                     <option key={d.value} value={d.value}>{d.label}</option>
                   ))}
                 </select>
+                <p className="text-body-sm text-secondary mt-1">
+                  Auto-filled from Role — this is what My Tasks / stage assignment actually uses. Change it only for a deliberate exception.
+                </p>
               </Field>
             </div>
 
@@ -806,7 +830,12 @@ export default function UsersPage() {
                 <select
                   required
                   value={editForm.role}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, role: e.target.value as UserRole }))}
+                  onChange={(e) => {
+                    const newRole = e.target.value as UserRole;
+                    // Same auto-sync as Add User — keeps Department aligned
+                    // with Role by default; Admin can still override below.
+                    setEditForm((prev) => ({ ...prev, role: newRole, department: ROLE_TO_DEPARTMENT[newRole] }));
+                  }}
                   className={inputCls}
                 >
                   {USER_ROLES.map((r) => (
@@ -824,6 +853,21 @@ export default function UsersPage() {
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
                 </select>
+              </Field>
+              <Field label="Department" icon="apartment">
+                <select
+                  required
+                  value={editForm.department}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, department: e.target.value }))}
+                  className={inputCls}
+                >
+                  {USER_DEPARTMENTS.map((d) => (
+                    <option key={d.value} value={d.value}>{d.label}</option>
+                  ))}
+                </select>
+                <p className="text-body-sm text-secondary mt-1">
+                  This drives My Tasks / stage assignment — not just Role. Fix it here if a user's tasks aren't showing up.
+                </p>
               </Field>
             </div>
 
