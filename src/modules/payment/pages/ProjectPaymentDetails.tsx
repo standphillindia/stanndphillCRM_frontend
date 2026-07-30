@@ -1,32 +1,38 @@
-// src/modules/payment/pages/LeadPaymentDetails.tsx
+// src/modules/payment/pages/ProjectPaymentDetails.tsx
 //
-// Lead-scoped mirror of ProjectPaymentDetails — the "Manage" page for a
-// single lead's PI/TI + payment tracking, before any Project exists. This
-// is the missing piece of the pre-WON finance flow:
+// Project-scoped "Manage Payments" page — reached via /payments/project/:projectId
+// (see routes/AppRouter.tsx: <Route path="project/:projectId" element={<ProjectPaymentDetails />} />).
 //
-//   NEGOTIATION → Initiate PI (Leads page) → PI_RAISED
-//     → record payment HERE → PAYMENT_RECEIVED
-//     → "Generate TI →" HERE → READY_TO_WON (Admin task list)
+// FIX NOTE: this file used to be a near-verbatim copy of LeadPaymentDetails.tsx
+// that was never actually converted to Project scope — it read
+// useParams<{ leadId: string }>() (always undefined on this route, since the
+// route param is :projectId), called fetchLeadById/getLeadInvoicesWithPayment,
+// and rendered Lead-only concepts (PI→TI→Ready-to-WON pre-WON flow, Lead PI/TI
+// same-day reauthorization). Because leadId was always undefined, the data-load
+// effect below never ran, so `loading` (initialised true) never flipped to
+// false — the page spun on "Loading..." forever, which is the bug reported.
 //
-// Reached from Payments → List → a "Leads" section (or directly via
-// /payments/lead/:leadId), and also linked from the Leads page itself for
-// any lead at PI_RAISED / PAYMENT_RECEIVED / READY_TO_WON.
+// This version actually loads a Project (getProjectById) and its invoices
+// (getProjectInvoicesWithPayment), and uses the already-existing, already-built
+// ProjectInvoiceFormModal (createProjectInvoice) instead of the Lead-only
+// LeadInvoiceFormModal. The Lead PI/TI same-day-lock reauthorization UI has
+// been removed entirely — it doesn't apply here; a Project's own access-lock/
+// reauthorization flow (for late stage-tracker tasks) is handled separately,
+// in My Tasks / ProjectStageTrackerService, not on this payments page.
 
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { FileText, Plus, ArrowLeft, IndianRupee, Receipt } from "lucide-react";
-import { fetchLeadById, requestLeadReauthorization, reauthorizeLeadFinanceAccess, type LeadResponse } from "../../../services/leadService";
-import { useAuth } from "../../../context/AuthContext";
-import { getRoleFromToken } from "../../../utils/jwt";
+import { getProjectById, type ProjectResponse } from "../../../services/projectService";
 import {
-  getLeadInvoicesWithPayment,
+  getProjectInvoicesWithPayment,
   getInvoiceDetailsById,
   generateTiFromPi,
   linkTiToPi,
   type ProjectInvoicePaymentRow,
   type InvoiceDetailsResponse,
 } from "../../../services/invoiceService";
-import LeadInvoiceFormModal from "../../../components/invoice/LeadInvoiceFormModal";
+import ProjectInvoiceFormModal from "../../../components/invoice/ProjectInvoiceFormModal";
 import AmcInvoicePreviewModal from "../../../components/invoice/AmcInvoicePreviewModal";
 import AddPaymentTransactionModal from "../components/AddPaymentTransactionModal";
 
@@ -37,29 +43,17 @@ const STATUS_STYLES: Record<string, string> = {
   OVERDUE: "bg-red-100 text-red-800",
 };
 
-const LEAD_STATUS_STYLES: Record<string, string> = {
-  PI_RAISED: "bg-orange-100 text-orange-800",
-  PAYMENT_RECEIVED: "bg-teal-100 text-teal-800",
-  READY_TO_WON: "bg-lime-100 text-lime-800",
-  WON: "bg-emerald-100 text-emerald-800",
-};
-
-export default function LeadPaymentDetails() {
-  const { leadId } = useParams<{ leadId: string }>();
+export default function ProjectPaymentDetails() {
+  const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const { token } = useAuth();
-  const isAdmin = getRoleFromToken(token) === "ADMIN";
 
-  const [lead, setLead] = useState<LeadResponse | null>(null);
+  const [project, setProject] = useState<ProjectResponse | null>(null);
   const [rows, setRows] = useState<ProjectInvoicePaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [showPiForm, setShowPiForm] = useState(false);
   const [showTiForm, setShowTiForm] = useState(false);
-  const [reauthModalFor, setReauthModalFor] = useState<"PI" | "TI" | null>(null);
-  const [reauthReason, setReauthReason] = useState("");
-  const [reauthBusy, setReauthBusy] = useState(false);
   const [previewInvoice, setPreviewInvoice] = useState<InvoiceDetailsResponse | null>(null);
   const [recordPaymentFor, setRecordPaymentFor] = useState<ProjectInvoicePaymentRow | null>(null);
   const [generatingTi, setGeneratingTi] = useState<string | null>(null);
@@ -68,56 +62,28 @@ export default function LeadPaymentDetails() {
   const [linkSubmitting, setLinkSubmitting] = useState(false);
 
   useEffect(() => {
-    if (leadId) loadData(leadId);
-  }, [leadId]);
+    if (projectId) loadData(projectId);
+  }, [projectId]);
 
   const loadData = async (id: string) => {
     setLoading(true);
     setError(null);
     try {
-      const [leadDetails, invoiceRows] = await Promise.all([
-        fetchLeadById(id),
-        getLeadInvoicesWithPayment(id),
+      const [projectDetails, invoiceRows] = await Promise.all([
+        getProjectById(id),
+        getProjectInvoicesWithPayment(id),
       ]);
-      setLead(leadDetails);
+      setProject(projectDetails);
       setRows(invoiceRows);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load lead payment details");
+      setError(err instanceof Error ? err.message : "Failed to load project payment details");
     } finally {
       setLoading(false);
     }
   };
 
   const refresh = () => {
-    if (leadId) loadData(leadId);
-  };
-
-  const handleReauthSubmit = async () => {
-    if (!leadId || !reauthModalFor || !reauthReason.trim()) return;
-    setReauthBusy(true);
-    try {
-      await requestLeadReauthorization(leadId, reauthModalFor, reauthReason.trim());
-      setReauthModalFor(null);
-      setReauthReason("");
-      refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send the request.");
-    } finally {
-      setReauthBusy(false);
-    }
-  };
-
-  const handleAdminRestore = async (which: "PI" | "TI") => {
-    if (!leadId) return;
-    setReauthBusy(true);
-    try {
-      await reauthorizeLeadFinanceAccess(leadId, which);
-      refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not restore access.");
-    } finally {
-      setReauthBusy(false);
-    }
+    if (projectId) loadData(projectId);
   };
 
   const openPreview = async (invoiceId: string) => {
@@ -134,7 +100,6 @@ export default function LeadPaymentDetails() {
     setError(null);
     try {
       await generateTiFromPi(piId);
-      alert("✅ TI generated — this lead is now Ready to Won (check Admin Panel).");
       refresh();
     } catch (err) {
       const anyErr = err as { response?: { data?: { message?: string } }; message?: string };
@@ -176,31 +141,40 @@ export default function LeadPaymentDetails() {
     );
   }
 
-  if (error && !lead) {
+  if (error && !project) {
     return (
       <div className="p-6">
-        <button onClick={() => navigate("/leads")} className="text-blue-600 hover:text-blue-800 font-medium mb-4">
-          ← Back to Leads
+        <button onClick={() => navigate("/projects")} className="text-blue-600 hover:text-blue-800 font-medium mb-4">
+          ← Back to Projects
         </button>
         <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">{error}</div>
       </div>
     );
   }
 
-  if (!lead) return null;
+  if (!project) return null;
 
   return (
     <div className="p-6 space-y-6">
       <div>
-        <button onClick={() => navigate("/leads")} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium mb-2">
-          <ArrowLeft size={16} /> Back to Leads
+        <button onClick={() => navigate("/projects")} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium mb-2">
+          <ArrowLeft size={16} /> Back to Projects
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">{lead.companyName}</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{project.projectName}</h1>
         <p className="text-gray-600 mt-1 flex items-center gap-2 flex-wrap">
-          {lead.contactName} · {lead.email}
-          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${LEAD_STATUS_STYLES[lead.status] || "bg-gray-100 text-gray-800"}`}>
-            {lead.status.replace(/_/g, " ")}
-          </span>
+          {project.certificationType}
+          {project.currentStageDisplayName && (
+            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+              project.currentStageLate ? "bg-red-100 text-red-800" : "bg-gray-100 text-gray-800"
+            }`}>
+              {project.currentStageDisplayName}
+              {project.currentStageLate && " (late)"}
+            </span>
+          )}
+        </p>
+        <p className="text-sm text-gray-500 mt-1">
+          Total: {formatCurrency(project.amount)} · Received: {formatCurrency(project.receivedAmount)} · Pending: {formatCurrency(project.pendingAmount)}
+          {project.overdueAmount > 0 && <> · <span className="text-red-600 font-medium">Overdue: {formatCurrency(project.overdueAmount)}</span></>}
         </p>
       </div>
 
@@ -208,72 +182,12 @@ export default function LeadPaymentDetails() {
         <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">{error}</div>
       )}
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
-        <span className="font-semibold">Pre-WON finance flow:</span> record the client's payment against the PI
-        below. Once it's fully <span className="font-semibold">PAID</span>, a "Generate TI" button appears —
-        generating it moves this lead straight to <span className="font-semibold">Ready to Won</span> in the
-        Admin Panel, where Admin assigns Ops + Engineer and presses WON to start the project.
-      </div>
-
-      {isAdmin && (lead.piAccessLocked || lead.tiAccessLocked) && (
-        <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 space-y-3">
-          {lead.piAccessLocked && (
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm">
-                <p className="font-semibold text-amber-800">🔒 PI access locked — not raised same-day</p>
-                {lead.piReauthorizationRequestReason && (
-                  <p className="text-amber-700 mt-1">🙋 Finance's reason: "{lead.piReauthorizationRequestReason}"</p>
-                )}
-              </div>
-              <button
-                disabled={reauthBusy}
-                onClick={() => handleAdminRestore("PI")}
-                className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
-              >
-                🔓 Restore PI Access
-              </button>
-            </div>
-          )}
-          {lead.tiAccessLocked && (
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-sm">
-                <p className="font-semibold text-amber-800">🔒 TI access locked — not generated same-day</p>
-                {lead.tiReauthorizationRequestReason && (
-                  <p className="text-amber-700 mt-1">🙋 Finance's reason: "{lead.tiReauthorizationRequestReason}"</p>
-                )}
-              </div>
-              <button
-                disabled={reauthBusy}
-                onClick={() => handleAdminRestore("TI")}
-                className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
-              >
-                🔓 Restore TI Access
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="flex gap-3">
-        {(lead.status === "NEGOTIATION" || lead.status === "PI_RAISED")
-          && !rows.some((r) => r.invoiceType === "PROFORMA") && (
-          lead.piAccessLocked ? (
-            lead.piReauthorizationRequestedAt ? (
-              <span className="flex items-center gap-1 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg font-medium text-sm">
-                ⏳ Requested — waiting for Admin
-              </span>
-            ) : (
-              <button onClick={() => setReauthModalFor("PI")}
-                className="flex items-center gap-1 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium text-sm">
-                🔒 Locked — Request Access
-              </button>
-            )
-          ) : (
-            <button onClick={() => setShowPiForm(true)}
-              className="flex items-center gap-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium text-sm">
-              <Plus size={16} /> {lead.status === "PI_RAISED" ? "Create PI" : "Initiate PI"}
-            </button>
-          )
+        {!rows.some((r) => r.invoiceType === "PROFORMA") && (
+          <button onClick={() => setShowPiForm(true)}
+            className="flex items-center gap-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium text-sm">
+            <Plus size={16} /> Create PI
+          </button>
         )}
 
         {/* Manual fallback — the "Generate TI →" button on the PI row only
@@ -282,23 +196,10 @@ export default function LeadPaymentDetails() {
             create the TI directly, this is always available regardless of
             status. The form itself lets you link it to an existing PI. */}
         {rows.some((r) => r.invoiceType === "PROFORMA") && (
-          lead.tiAccessLocked ? (
-            lead.tiReauthorizationRequestedAt ? (
-              <span className="flex items-center gap-1 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg font-medium text-sm">
-                ⏳ Requested — waiting for Admin
-              </span>
-            ) : (
-              <button onClick={() => setReauthModalFor("TI")}
-                className="flex items-center gap-1 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium text-sm">
-                🔒 Locked — Request Access
-              </button>
-            )
-          ) : (
-            <button onClick={() => setShowTiForm(true)}
-              className="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">
-              <Plus size={16} /> New TI (manual)
-            </button>
-          )
+          <button onClick={() => setShowTiForm(true)}
+            className="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">
+            <Plus size={16} /> New TI (manual)
+          </button>
         )}
       </div>
 
@@ -309,9 +210,7 @@ export default function LeadPaymentDetails() {
 
         {rows.length === 0 ? (
           <div className="p-8 text-center text-gray-500 text-sm">
-            No PI raised yet for this lead.
-            {(lead.status === "NEGOTIATION" || lead.status === "PI_RAISED")
-              && " Use the button above to create it."}
+            No PI raised yet for this project. Use the button above to create it.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -393,16 +292,16 @@ export default function LeadPaymentDetails() {
         )}
       </div>
 
-      <LeadInvoiceFormModal
-        lead={lead}
+      <ProjectInvoiceFormModal
+        project={project}
         invoiceType="PROFORMA"
         isOpen={showPiForm}
         onClose={() => setShowPiForm(false)}
         onCreated={() => { setShowPiForm(false); refresh(); }}
       />
 
-      <LeadInvoiceFormModal
-        lead={lead}
+      <ProjectInvoiceFormModal
+        project={project}
         invoiceType="TAX"
         isOpen={showTiForm}
         onClose={() => setShowTiForm(false)}
@@ -463,39 +362,6 @@ export default function LeadPaymentDetails() {
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
               >
                 {linkSubmitting ? "Linking..." : "Link"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {reauthModalFor && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-sm">
-            <h2 className="text-lg font-semibold mb-1">Request Access Back</h2>
-            <p className="text-xs text-gray-500 mb-4">{reauthModalFor} access on {lead?.companyName}</p>
-            <label className="block text-sm text-gray-600 mb-1">Why do you need access restored? *</label>
-            <textarea
-              value={reauthReason}
-              onChange={(e) => setReauthReason(e.target.value)}
-              rows={3}
-              className="w-full border rounded-lg px-3 py-2 mb-4"
-              placeholder={`Explain why the ${reauthModalFor} wasn't raised same-day — Admin will review this.`}
-            />
-            <p className="text-xs text-gray-500 mb-4">Admin will see this reason and can restore your access.</p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => { setReauthModalFor(null); setReauthReason(""); }}
-                className="px-3 py-1.5 rounded-lg text-sm bg-gray-100 hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={reauthBusy || !reauthReason.trim()}
-                onClick={handleReauthSubmit}
-                className="px-3 py-1.5 rounded-lg text-sm text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
-              >
-                {reauthBusy ? "Sending…" : "Send Request"}
               </button>
             </div>
           </div>
