@@ -444,7 +444,7 @@ export default function MainLayout() {
       {/* ── Mobile overlay ─────────────────────────────────────────────────── */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-20 bg-black/30 lg:hidden"
+          className="fixed inset-0 z-[45] bg-black/30 lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -452,7 +452,7 @@ export default function MainLayout() {
       {/* ── Sidebar — desktop fixed, mobile drawer ────────────────────────── */}
       <aside
         className={[
-          "fixed inset-y-0 left-0 z-30 w-60 flex flex-col",
+          "fixed inset-y-0 left-0 z-50 w-60 flex flex-col",
           "bg-surface/80 backdrop-blur-md",
           "border-r border-outline-variant/10 shadow-sm",
           "transform transition-transform duration-200 ease-in-out",
@@ -534,7 +534,7 @@ export default function MainLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto px-4 lg:px-10 py-8">
+        <main className="flex-1 overflow-y-auto px-4 lg:px-10 pt-6 lg:pt-8 pb-28 lg:pb-8">
           <Outlet />
         </main>
       </div>
@@ -544,7 +544,8 @@ export default function MainLayout() {
         bg-surface/80 backdrop-blur-xl
         border-t border-outline-variant/10
         flex justify-around items-center px-4 py-2
-        z-50 rounded-t-xl shadow-lg">
+        z-40 rounded-t-xl shadow-lg"
+        style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
         {[
           { path: "/dashboard", icon: "dashboard" },
           { path: "/leads",     icon: "person_search" },

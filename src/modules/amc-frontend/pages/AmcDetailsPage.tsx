@@ -125,7 +125,7 @@ export default function AmcDetailsPage() {
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="p-2 sm:p-6 bg-gray-50 min-h-screen">
       {/* Header */}
       <div className="mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
@@ -135,7 +135,7 @@ export default function AmcDetailsPage() {
           >
             ← Back to List
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">AMC Details</h1>
+          <h1 className="text-2xl sm:text-3xl break-words font-bold text-gray-900">AMC Details</h1>
           <p className="text-gray-600 mt-1">AMC Code: <span className="font-semibold">{amc.amcCode}</span></p>
         </div>
         <div className="flex gap-3">
@@ -314,7 +314,7 @@ function OverviewTab({ details }: { details: AmcDetailsResponse }) {
             </div>
             <div>
               <dt className="text-sm font-medium text-gray-600">Amount</dt>
-              <dd className="text-2xl font-bold text-green-600 mt-1">{formatCurrency(amc.amount)}</dd>
+              <dd className="text-lg sm:text-2xl break-words font-bold text-green-600 mt-1">{formatCurrency(amc.amount)}</dd>
             </div>
           </dl>
         </div>
@@ -324,19 +324,19 @@ function OverviewTab({ details }: { details: AmcDetailsResponse }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
           <p className="text-gray-600 text-sm font-medium">Total Visits</p>
-          <p className="text-3xl font-bold text-blue-600 mt-2">{details.visits.length}</p>
+          <p className="text-2xl sm:text-3xl break-words font-bold text-blue-600 mt-2">{details.visits.length}</p>
         </div>
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-center">
           <p className="text-gray-600 text-sm font-medium">Reports</p>
-          <p className="text-3xl font-bold text-purple-600 mt-2">{details.reports.length}</p>
+          <p className="text-2xl sm:text-3xl break-words font-bold text-purple-600 mt-2">{details.reports.length}</p>
         </div>
         <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-center">
           <p className="text-gray-600 text-sm font-medium">Billings</p>
-          <p className="text-3xl font-bold text-orange-600 mt-2">{details.billings.length}</p>
+          <p className="text-2xl sm:text-3xl break-words font-bold text-orange-600 mt-2">{details.billings.length}</p>
         </div>
         <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 text-center">
           <p className="text-gray-600 text-sm font-medium">Portal Updates</p>
-          <p className="text-3xl font-bold text-indigo-600 mt-2">{details.portalUpdates.length}</p>
+          <p className="text-2xl sm:text-3xl break-words font-bold text-indigo-600 mt-2">{details.portalUpdates.length}</p>
         </div>
       </div>
 

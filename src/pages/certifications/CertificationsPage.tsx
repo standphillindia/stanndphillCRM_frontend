@@ -350,7 +350,7 @@ export default function CertificationsPage() {
             </div>
 
             {/* Details Grid */}
-            <div className="grid grid-cols-2 gap-6 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
               <div>
                 <p className="text-xs text-gray-500 font-medium uppercase mb-1">Certificate Number</p>
                 <p className="text-sm font-semibold text-gray-900">{selectedCert.certificateNo}</p>

@@ -94,16 +94,44 @@ export interface TransitionAMCLeadRequest {
 // API FUNCTIONS
 // ─────────────────────────────────────────────────────────────
 
+// Spring's @EnableSpringDataWebSupport(pageSerializationMode = VIA_DTO)
+// serializes Page<T> as { content, page: { totalElements, totalPages, ... } }
+// — pagination fields NESTED under "page", not top-level. The UI expects
+// them flat (data.totalPages), so without this normalization both leads
+// pages read `undefined` and the pagination bar never renders (the
+// "undefined total AMC leads" bug). Handles both shapes so nothing breaks
+// if the backend serialization mode ever changes.
+interface SpringPagedModel<T> {
+  content: T[];
+  page?: { size: number; number: number; totalElements: number; totalPages: number };
+  totalElements?: number;
+  totalPages?: number;
+  number?: number;
+  size?: number;
+}
+
+function normalizePage<T>(data: SpringPagedModel<T>): {
+  content: T[]; totalElements: number; totalPages: number; number: number; size: number;
+} {
+  return {
+    content:       data.content ?? [],
+    totalElements: data.totalElements ?? data.page?.totalElements ?? 0,
+    totalPages:    data.totalPages    ?? data.page?.totalPages    ?? 0,
+    number:        data.number        ?? data.page?.number        ?? 0,
+    size:          data.size          ?? data.page?.size          ?? 10,
+  };
+}
+
 // GET /api/amc-leads/filter
 export const fetchAMCLeads = async (
   params: AMCLeadFilterParams = {}
 ): Promise<PagedAMCLeads> => {
-  const res = await api.get<PagedAMCLeads>(
+  const res = await api.get<SpringPagedModel<AMCLeadResponse>>(
     "/amc-leads/filter",
     { params }
   );
 
-  return res.data;
+  return normalizePage<AMCLeadResponse>(res.data);
 };
 
 // GET /api/amc-leads/{id}

@@ -174,10 +174,10 @@ export default function CreateAmc() {
   };
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen max-w-4xl mx-auto">
+    <div className="p-2 sm:p-6 bg-gray-50 min-h-screen max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Create New AMC</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Create New AMC</h1>
         <p className="text-gray-600 mt-2">Set up a new Annual Maintenance Contract</p>
       </div>
 
@@ -443,7 +443,7 @@ export default function CreateAmc() {
           </div>
 
           {/* Buttons */}
-          <div className="flex gap-4 pt-6 border-t border-gray-200">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-6 border-t border-gray-200">
             <button
               type="button"
               onClick={() => navigate('/amc/list')}

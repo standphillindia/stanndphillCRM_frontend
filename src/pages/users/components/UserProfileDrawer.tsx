@@ -100,7 +100,7 @@ export default function UserProfileDrawer({ user, onClose, onEdit }: UserProfile
           </div>
 
           {/* Contact + meta grid */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-3 bg-surface-container-low rounded-lg">
               <p className="text-label-caps text-outline uppercase mb-1">Phone</p>
               <p className="text-body-md text-on-surface">{user.phone || "—"}</p>
@@ -141,7 +141,7 @@ export default function UserProfileDrawer({ user, onClose, onEdit }: UserProfile
               const countCards = (label: string, b?: { total: number; won: number; lost: number }) => (
                 <div key={label} className="mb-3">
                   <p className="text-body-sm font-medium text-on-surface mb-2">{label}</p>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {[
                       { l: "Total", v: b?.total, cls: "text-primary" },
                       { l: "Won",   v: b?.won,   cls: "text-emerald-600" },
@@ -166,7 +166,7 @@ export default function UserProfileDrawer({ user, onClose, onEdit }: UserProfile
                   {showOps && (
                     <div>
                       <p className="text-body-sm font-medium text-on-surface mb-2">Projects (Operations)</p>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {[
                           { l: "Total",    v: performance?.projects.total,  cls: "text-primary" },
                           { l: "On Time",  v: performance?.projects.onTime, cls: "text-emerald-600" },
@@ -219,7 +219,7 @@ export default function UserProfileDrawer({ user, onClose, onEdit }: UserProfile
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-2">
+          <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-4 mt-2 bg-surface-container-lowest border-t border-outline-variant/10 flex gap-3">
             <button
               onClick={() => onEdit(user)}
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-on-primary

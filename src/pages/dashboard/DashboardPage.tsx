@@ -12,7 +12,6 @@ interface DashboardStats {
   qualifiedLeads: number;
   wonLeads: number;
   followUpLeads: number;
-  totalDeals: number;
   activeProjects: number;
   completedProjects: number;
   pendingTasks: number;
@@ -25,13 +24,40 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
+  // ── Mobile responsiveness ──────────────────────────────────────────────
+  // The whole page is styled with inline style objects, which can't use CSS
+  // media queries — so we detect <640px viewports and override just the
+  // handful of layout values that break on phones (4/5-column grids, the
+  // 32px paddings that double up with the layout's own px-4, oversized
+  // display text, and the non-wrapping quick-action bar).
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  const styles = {
+    ...baseStyles,
+    header:       { ...baseStyles.header,       padding: isMobile ? "20px 16px" : "32px" },
+    mainContent:  { ...baseStyles.mainContent,  padding: isMobile ? "16px 4px"  : "32px" },
+    displayTitle: { ...baseStyles.displayTitle, fontSize: isMobile ? "26px" : "36px" },
+    actionBar:    { ...baseStyles.actionBar,    flexWrap: "wrap" as const },
+    statsGrid4:   { ...baseStyles.statsGrid4,
+      gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)" },
+    quickNavGrid: { ...baseStyles.quickNavGrid,
+      gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(4, 1fr)" },
+  };
+
   const [stats, setStats] = useState<DashboardStats>({
     totalLeads: 0,
     newLeads: 0,
     qualifiedLeads: 0,
     wonLeads: 0,
     followUpLeads: 0,
-    totalDeals: 0,
     activeProjects: 0,
     completedProjects: 0,
     pendingTasks: 0,
@@ -66,7 +92,6 @@ export default function DashboardPage() {
         qualifiedLeads: salesRes.data.qualifiedLeads,
         wonLeads: salesRes.data.convertedLeads,
         followUpLeads: salesRes.data.followUpLeadsCount,
-        totalDeals: projectRes.data.activeProjects,
         activeProjects: projectRes.data.activeProjects,
         completedProjects: projectRes.data.completedProjects,
         pendingTasks: projectRes.data.pendingTasks,
@@ -211,58 +236,32 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            {/* Projects & Deals Overview */}
-            <div style={styles.twoColumnGrid}>
-              {/* Projects Section */}
-              <section style={styles.section}>
-                <h2 style={styles.sectionTitle}>Projects</h2>
-                <div style={styles.statsGrid2x2}>
-                  <StatCard
-                    label="Active Projects"
-                    value={stats.activeProjects}
-                    color="#004ccd"
-                  />
-                  <StatCard
-                    label="Completed"
-                    value={stats.completedProjects}
-                    color="#24a148"
-                  />
-                  <StatCard
-                    label="Pending Tasks"
-                    value={stats.pendingTasks}
-                    color="#f1c21b"
-                  />
-                  <StatCard
-                    label="Completed Tasks"
-                    value={stats.completedTasks}
-                    color="#24a148"
-                  />
-                </div>
-              </section>
-
-              {/* Deals Section */}
-              <section style={styles.section}>
-                <h2 style={styles.sectionTitle}>Deals</h2>
-                <div
-                  onClick={() => navigate("/deals")}
-                  style={styles.dealsCard}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.boxShadow =
-                      "0 8px 24px rgba(0, 44, 112, 0.12)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow =
-                      "0 4px 8px rgba(0, 0, 0, 0.04)";
-                  }}
-                >
-                  <div style={styles.dealsCardLabel}>TOTAL DEALS</div>
-                  <div style={styles.dealsCardValue}>{stats.totalDeals}</div>
-                  <div style={styles.dealsCardLink}>View details →</div>
-                </div>
-              </section>
-            </div>
+            {/* Projects Overview */}
+            <section style={styles.section}>
+              <h2 style={styles.sectionTitle}>Projects</h2>
+              <div style={styles.statsGrid2x2}>
+                <StatCard
+                  label="Active Projects"
+                  value={stats.activeProjects}
+                  color="#004ccd"
+                />
+                <StatCard
+                  label="Completed"
+                  value={stats.completedProjects}
+                  color="#24a148"
+                />
+                <StatCard
+                  label="Pending Tasks"
+                  value={stats.pendingTasks}
+                  color="#f1c21b"
+                />
+                <StatCard
+                  label="Completed Tasks"
+                  value={stats.completedTasks}
+                  color="#24a148"
+                />
+              </div>
+            </section>
 
             {/* Quick Navigation */}
             <section style={styles.section}>
@@ -275,10 +274,6 @@ export default function DashboardPage() {
                 <QuickLink
                   label="Leads"
                   onClick={() => navigate("/leads")}
-                />
-                <QuickLink
-                  label="Deals"
-                  onClick={() => navigate("/deals")}
                 />
                 <QuickLink
                   label="Projects"
@@ -555,7 +550,7 @@ const cssVariables = `
   }
 `;
 
-const styles = {
+const baseStyles = {
   container: {
     background: "linear-gradient(135deg, #fcf9f8 0%, #f6f3f2 100%)",
     minHeight: "100vh",
@@ -703,55 +698,9 @@ const styles = {
     gridTemplateColumns: "repeat(2, 1fr)",
     gap: "16px",
   },
-
-  twoColumnGrid: {
-    display: "grid" as const,
-    gridTemplateColumns: "1fr 1fr",
-    gap: "24px",
-  },
-
-  dealsCard: {
-    background: "rgba(255, 255, 255, 0.7)",
-    backdropFilter: "blur(12px)",
-    border: "1px solid rgba(255, 255, 255, 0.5)",
-    borderRadius: "8px",
-    padding: "32px",
-    cursor: "pointer",
-    transition: "all 0.3s cubic-bezier(0.2, 0, 0.38, 0.9)",
-    display: "flex" as const,
-    flexDirection: "column" as const,
-    justifyContent: "center",
-    alignItems: "center",
-    minHeight: "240px",
-    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.04)",
-  },
-
-  dealsCardLabel: {
-    fontSize: "11px",
-    fontWeight: 600,
-    color: "#737687",
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-    marginBottom: "8px",
-  },
-
-  dealsCardValue: {
-    fontSize: "36px",
-    fontWeight: 700,
-    color: "#004ccd",
-    marginBottom: "16px",
-  },
-
-  dealsCardLink: {
-    fontSize: "12px",
-    fontWeight: 600,
-    color: "#004ccd",
-    opacity: 0.8,
-  },
-
   quickNavGrid: {
     display: "grid" as const,
-    gridTemplateColumns: "repeat(5, 1fr)",
+    gridTemplateColumns: "repeat(4, 1fr)",
     gap: "12px",
   },
 };

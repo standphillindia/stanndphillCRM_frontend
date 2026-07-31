@@ -37,10 +37,10 @@ export default function AmcDashboard() {
   if (loading) return <div className="p-6">Loading...</div>;
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="p-2 sm:p-6 bg-gray-50 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">AMC Dashboard</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">AMC Dashboard</h1>
         <p className="text-gray-600 mt-2">Overview of your Annual Maintenance Contracts</p>
       </div>
 
@@ -52,37 +52,37 @@ export default function AmcDashboard() {
           Renewals this month / Expiring in 30 days / Closed / Active */}
       {finance && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-lg shadow p-5">
+          <div className="bg-white rounded-lg shadow p-4 sm:p-5 min-w-0">
             <p className="text-gray-500 text-xs font-medium uppercase">Total AMC Value</p>
-            <p className="text-2xl font-bold text-gray-900 mt-2">{formatCurrency(finance.totalAmcValue)}</p>
+            <p className="text-lg sm:text-2xl break-words font-bold text-gray-900 mt-2">{formatCurrency(finance.totalAmcValue)}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-5">
+          <div className="bg-white rounded-lg shadow p-4 sm:p-5 min-w-0">
             <p className="text-gray-500 text-xs font-medium uppercase">Collected</p>
-            <p className="text-2xl font-bold text-green-600 mt-2">{formatCurrency(finance.collected)}</p>
+            <p className="text-lg sm:text-2xl break-words font-bold text-green-600 mt-2">{formatCurrency(finance.collected)}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-5">
+          <div className="bg-white rounded-lg shadow p-4 sm:p-5 min-w-0">
             <p className="text-gray-500 text-xs font-medium uppercase">Pending</p>
-            <p className="text-2xl font-bold text-orange-600 mt-2">{formatCurrency(finance.pending)}</p>
+            <p className="text-lg sm:text-2xl break-words font-bold text-orange-600 mt-2">{formatCurrency(finance.pending)}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-5">
+          <div className="bg-white rounded-lg shadow p-4 sm:p-5 min-w-0">
             <p className="text-gray-500 text-xs font-medium uppercase">Overdue</p>
-            <p className="text-2xl font-bold text-red-600 mt-2">{formatCurrency(finance.overdue)}</p>
+            <p className="text-lg sm:text-2xl break-words font-bold text-red-600 mt-2">{formatCurrency(finance.overdue)}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-5">
+          <div className="bg-white rounded-lg shadow p-4 sm:p-5 min-w-0">
             <p className="text-gray-500 text-xs font-medium uppercase">Renewals This Month</p>
-            <p className="text-2xl font-bold text-blue-600 mt-2">{finance.renewalsThisMonth}</p>
+            <p className="text-lg sm:text-2xl break-words font-bold text-blue-600 mt-2">{finance.renewalsThisMonth}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-5">
+          <div className="bg-white rounded-lg shadow p-4 sm:p-5 min-w-0">
             <p className="text-gray-500 text-xs font-medium uppercase">Expiring in 30 Days</p>
-            <p className="text-2xl font-bold text-yellow-600 mt-2">{finance.expiringIn30Days}</p>
+            <p className="text-lg sm:text-2xl break-words font-bold text-yellow-600 mt-2">{finance.expiringIn30Days}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-5">
+          <div className="bg-white rounded-lg shadow p-4 sm:p-5 min-w-0">
             <p className="text-gray-500 text-xs font-medium uppercase">Closed</p>
-            <p className="text-2xl font-bold text-gray-700 mt-2">{finance.closed}</p>
+            <p className="text-lg sm:text-2xl break-words font-bold text-gray-700 mt-2">{finance.closed}</p>
           </div>
-          <div className="bg-white rounded-lg shadow p-5">
+          <div className="bg-white rounded-lg shadow p-4 sm:p-5 min-w-0">
             <p className="text-gray-500 text-xs font-medium uppercase">Active</p>
-            <p className="text-2xl font-bold text-green-700 mt-2">{finance.active}</p>
+            <p className="text-lg sm:text-2xl break-words font-bold text-green-700 mt-2">{finance.active}</p>
           </div>
         </div>
       )}
@@ -91,27 +91,27 @@ export default function AmcDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-gray-600 text-sm font-medium">Total AMC</p>
-          <p className="text-3xl font-bold text-gray-900 mt-2">{dashboard?.totalAmc || 0}</p>
+          <p className="text-2xl sm:text-3xl break-words font-bold text-gray-900 mt-2">{dashboard?.totalAmc || 0}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-gray-600 text-sm font-medium">Active AMC</p>
-          <p className="text-3xl font-bold text-green-600 mt-2">{dashboard?.activeAmc || 0}</p>
+          <p className="text-2xl sm:text-3xl break-words font-bold text-green-600 mt-2">{dashboard?.activeAmc || 0}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-gray-600 text-sm font-medium">Closed AMC</p>
-          <p className="text-3xl font-bold text-red-600 mt-2">{dashboard?.expiredAmc || 0}</p>
+          <p className="text-2xl sm:text-3xl break-words font-bold text-red-600 mt-2">{dashboard?.expiredAmc || 0}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-gray-600 text-sm font-medium">Pending Visits</p>
-          <p className="text-3xl font-bold text-yellow-600 mt-2">{dashboard?.pendingVisit || 0}</p>
+          <p className="text-2xl sm:text-3xl break-words font-bold text-yellow-600 mt-2">{dashboard?.pendingVisit || 0}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-gray-600 text-sm font-medium">Pending Reports</p>
-          <p className="text-3xl font-bold text-purple-600 mt-2">{dashboard?.pendingReport || 0}</p>
+          <p className="text-2xl sm:text-3xl break-words font-bold text-purple-600 mt-2">{dashboard?.pendingReport || 0}</p>
         </div>
         <div className="bg-white rounded-lg shadow p-6">
           <p className="text-gray-600 text-sm font-medium">Pending Billing</p>
-          <p className="text-3xl font-bold text-orange-600 mt-2">{dashboard?.pendingBilling || 0}</p>
+          <p className="text-2xl sm:text-3xl break-words font-bold text-orange-600 mt-2">{dashboard?.pendingBilling || 0}</p>
         </div>
       </div>
 

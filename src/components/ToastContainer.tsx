@@ -15,7 +15,7 @@ export default function ToastContainer() {
         top: "20px",
         right: "20px",
         zIndex: 9999,
-        maxWidth: "400px",
+        maxWidth: "min(400px, calc(100vw - 24px))",
         pointerEvents: "none",
         display: "flex",
         flexDirection: "column",

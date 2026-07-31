@@ -58,16 +58,16 @@ export default function AmcList() {
   if (loading) return <div className="p-6">Loading...</div>;
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="p-2 sm:p-6 bg-gray-50 min-h-screen">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">AMC Management</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">AMC Management</h1>
           <p className="text-gray-600 mt-2">View and manage all contracts — with live financial status</p>
         </div>
         <button
           onClick={() => navigate('/amc/create')}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shrink-0 self-start sm:self-auto whitespace-nowrap"
         >
           + Create AMC
         </button>
