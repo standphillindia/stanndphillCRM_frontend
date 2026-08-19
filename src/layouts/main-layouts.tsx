@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { logoutUser } from "../services/authService";
 import { fetchMyModules } from "../services/permissionService";
+import { fetchTasks } from "../services/taskService";
 import logo from "../assets/logo.png";
 import NotificationBell from "../pages/Notification/Notoficationbell";
 import { useAuth } from "../context/AuthContext";
@@ -62,6 +63,14 @@ const NAV_ITEMS: NavItemConfig[] = [
     // No `module` restriction — every department (Operations, Engineering,
     // Finance, Admin) needs their own stage-tracker task list; the backend
     // itself scopes the results to the logged-in user's department.
+  },
+  {
+    path: "/tasks",
+    label: "Urgent Tasks",
+    icon: "priority_high",
+    // Same as My Tasks — no module gate. Ad-hoc items (client issues,
+    // lab-test follow-ups) can be assigned to anyone, so everyone needs to
+    // see this list to find work assigned to them.
   },
   {
     path: "/payments",
@@ -179,6 +188,42 @@ function SidebarContent({
     fetchMyModules()
       .then(setAllowedModules)
       .catch(() => setAllowedModules([])); // fail closed — show only the always-visible items
+  }, []);
+
+  // "Urgent Tasks" badge — total pending (OPEN/IN_PROGRESS/BLOCKED) count, plus
+  // how many of those are overdue (dueDate in the past). Uses /tasks/filter
+  // (no role restriction) — the same data source TasksPage.tsx (Urgent Tasks)
+  // itself reads from. NOTE: this is NOT the project stage-tracker ("My
+  // Tasks") — that page uses a different service (projectStageService).
+  const [taskCounts, setTaskCounts] = useState<{ pending: number; overdue: number } | null>(null);
+
+  useEffect(() => {
+    const email = localStorage.getItem("userEmail");
+    if (!email) return;
+
+    // size: 200 is a practical cap for a sidebar badge — comfortably covers
+    // one person's realistic open-task load without extra round trips.
+    fetchTasks({ assignedToEmail: email, size: 200, sortBy: "dueDate", sortDir: "asc" })
+      .then((res) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        let pending = 0;
+        let overdue = 0;
+
+        res.content.forEach((task) => {
+          if (task.status === "DONE") return;
+          pending++;
+          if (task.dueDate) {
+            const due = new Date(task.dueDate);
+            due.setHours(0, 0, 0, 0);
+            if (due < today) overdue++;
+          }
+        });
+
+        setTaskCounts({ pending, overdue });
+      })
+      .catch(() => setTaskCounts(null)); // fail silent — badge just won't show
   }, []);
 
   const visibleNavItems = (
@@ -323,6 +368,18 @@ function SidebarContent({
             <span className="text-[14px] font-medium flex-1 truncate">
               {item.label}
             </span>
+            {item.path === "/tasks" && taskCounts && taskCounts.pending > 0 && (
+              <span className="flex items-center gap-1 shrink-0">
+                <span className="text-[10px] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded-full leading-none">
+                  {taskCounts.pending}
+                </span>
+                {taskCounts.overdue > 0 && (
+                  <span className="text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full leading-none">
+                    {taskCounts.overdue} overdue
+                  </span>
+                )}
+              </span>
+            )}
             {item.badge && (
               <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full leading-none">
                 {item.badge}

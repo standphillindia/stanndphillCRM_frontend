@@ -170,26 +170,11 @@ export function formatDateISO(value: string | Date): string {
   return date.toISOString().split("T")[0];
 }
 
-/**
- * Calculate tax amount (18% IGST by default)
- * 
- * Examples:
- *   calculateTax(100000) → 18000
- *   calculateTax(100000, 5) → 5000
- */
-export function calculateTax(amount: number, taxRate: number = 18): number {
-  return Math.round(amount * (taxRate / 100));
-}
-
-/**
- * Calculate total with tax
- * 
- * Examples:
- *   calculateTotal(100000, 18000) → 118000
- */
-export function calculateTotal(amount: number, tax: number): number {
-  return amount + tax;
-}
+// Tax helpers used to live here as a third, divergent copy — this one
+// rounded with Math.round while invoiceService used toFixed(2), so the
+// same invoice could total differently depending on which module you
+// went through. Tax now belongs to the backend, with a single mirrored
+// preview implementation in constants/taxConstants.ts.
 
 /**
  * Format line items for invoice display
@@ -398,8 +383,6 @@ export default {
   formatCurrency,
   formatDate,
   formatDateISO,
-  calculateTax,
-  calculateTotal,
   formatDescription,
   validateGST,
   formatGST,

@@ -3,10 +3,12 @@ import {
   fetchTasks,
   type TaskResponse,
 } from "../../services/taskService";
+import CreateTaskModal from "../../components/tasks/CreateTaskModal";
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const loadTasks = async () => {
     try {
@@ -34,15 +36,30 @@ export default function TasksPage() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">
-          Tasks
-        </h1>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">
+            Tasks
+          </h1>
 
-        <p className="text-gray-500">
-          Engineer Assigned Tasks
-        </p>
+          <p className="text-gray-500">
+            Engineer Assigned Tasks
+          </p>
+        </div>
+
+        <button
+          onClick={() => setIsCreateOpen(true)}
+          className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+        >
+          + New Task
+        </button>
       </div>
+
+      <CreateTaskModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onSuccess={loadTasks}
+      />
 
       <div className="overflow-x-auto rounded-lg border bg-white">
         <table className="w-full">

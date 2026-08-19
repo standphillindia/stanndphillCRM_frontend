@@ -110,7 +110,7 @@ export default function NotificationBell({ userEmail }: NotificationBellProps) {
   // Poll on mount
   useEffect(() => {
     pollNotifications();
-    const interval = setInterval(pollNotifications, 1000);
+    const interval = setInterval(pollNotifications, 60000);
     return () => clearInterval(interval);
   }, [pollNotifications]);
 

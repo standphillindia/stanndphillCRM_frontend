@@ -15,8 +15,8 @@ export interface Signatory {
 }
 
 export const SIGNATORIES: Signatory[] = [
-  { id: "signatory-1", name: "For StandphillIndia", imageUrl: signature1 },
-  { id: "signatory-2", name: "For standphillindia", imageUrl: signature2 },
+  { id: "signatory-1", name: "Mayank Pal ", imageUrl: signature1 },
+  { id: "signatory-2", name: "Abhishek Chaturvedi", imageUrl: signature2 },
 ];
 
 export function getSignatoryByName(name?: string | null): Signatory | undefined {

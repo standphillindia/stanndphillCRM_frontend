@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getAdminLeads, type LeadResponse } from "../../../services/leadService";
+import { getFinanceLeads, type LeadResponse } from "../../../services/leadService";
 
 const FINANCE_RELEVANT_STATUSES = ["NEGOTIATION", "PI_RAISED", "PAYMENT_RECEIVED", "READY_TO_WON"];
 
@@ -36,7 +36,9 @@ export default function LeadPaymentsList() {
     setLoading(true);
     setError(null);
     try {
-      const all = await getAdminLeads();
+      // Backend now returns only finance-pipeline statuses; the local
+      // filter stays as a safety net if statuses ever drift.
+      const all = await getFinanceLeads();
       setLeads(all.filter((l) => FINANCE_RELEVANT_STATUSES.includes(l.status)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load leads");

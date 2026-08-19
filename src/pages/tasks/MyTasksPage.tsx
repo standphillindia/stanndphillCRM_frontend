@@ -23,7 +23,7 @@ import {
 } from "../../services/projectStageService";
 import { useToast } from "../../context/ToastContext";
 import { useAuth } from "../../context/AuthContext";
-import { getRoleFromToken } from "../../utils/jwt";
+import { getRoleFromToken, decodeJwt } from "../../utils/jwt";
 
 export default function MyTasksPage() {
   const { addToast } = useToast();
@@ -32,6 +32,7 @@ export default function MyTasksPage() {
 
   const { token } = useAuth();
   const isAdmin = getRoleFromToken(token) === "ADMIN";
+  const myEmail = decodeJwt(token)?.sub ?? "";
   const [checkingNow, setCheckingNow] = useState(false);
 
   const [tasks, setTasks] = useState<StageTrackerResponse[]>([]);
@@ -239,7 +240,13 @@ export default function MyTasksPage() {
         <>
           <h2 className="text-sm font-semibold text-red-700 uppercase mb-2">Late ({late.length})</h2>
           <div className="overflow-x-auto rounded-lg border bg-white mb-6">
-            <TaskTable rows={late} busyId={busyId} onComplete={handleComplete} late />
+            <TaskTable
+    rows={late}
+    busyId={busyId}
+    onComplete={handleComplete}
+    myEmail={myEmail}
+    late
+/>
           </div>
         </>
       )}
@@ -248,7 +255,13 @@ export default function MyTasksPage() {
         <>
           <h2 className="text-sm font-semibold text-gray-500 uppercase mb-2">In Progress ({active.length})</h2>
           <div className="overflow-x-auto rounded-lg border bg-white">
-            <TaskTable rows={active} busyId={busyId} onComplete={handleComplete} />
+            <TaskTable
+    rows={late}
+    busyId={busyId}
+    onComplete={handleComplete}
+    myEmail={myEmail}
+    late
+/>
           </div>
         </>
       )}
@@ -427,11 +440,13 @@ function TaskTable({
   rows,
   busyId,
   onComplete,
+  myEmail,
   late = false,
 }: {
   rows: StageTrackerResponse[];
   busyId: string | null;
   onComplete: (t: StageTrackerResponse) => void;
+  myEmail: string;
   late?: boolean;
 }) {
   return (
@@ -478,25 +493,45 @@ function TaskTable({
             <td className="p-3">
               {t.accessLocked ? (
                 <span className="text-xs text-red-700 bg-red-100 rounded px-2 py-1">🔒 Locked — ask Admin</span>
-              ) : (
-                <button
-                  disabled={busyId === t.id}
-                  onClick={() => onComplete(t)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-50 ${
-                    late ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"
-                  }`}
-                >
-                  {busyId === t.id
-                    ? "Saving…"
-                    : t.stageCode === "AUDIT_SCHEDULE"
-                    ? "Schedule Audit"
-                    : t.stageCode === "CLIENT_VISIT_ENG"
-                    ? (parseEngineerVisitState(t.validationData).visitStatus === "SCHEDULED"
-                        ? "Log Visit Result"
-                        : "Schedule Visit")
-                    : "Mark Done"}
-                </button>
-              )}
+              ) : (() => {
+                // Check if this stage is assigned to a specific person
+                // assignedUserEmail comes from backend (engineer or opsPerson on the project)
+                const assignedEmail = (t as StageTrackerResponse & { assignedUserEmail?: string }).assignedUserEmail;
+                const isAssignedToMe = !assignedEmail || assignedEmail === myEmail;
+
+                if (!isAssignedToMe) {
+                  return (
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                        🔒 Assigned to another person
+                      </span>
+                      <span className="text-[10px] text-gray-400">
+                        Only {assignedEmail?.split("@")[0]} can complete this
+                      </span>
+                    </div>
+                  );
+                }
+
+                return (
+                  <button
+                    disabled={busyId === t.id}
+                    onClick={() => onComplete(t)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-50 ${
+                      late ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"
+                    }`}
+                  >
+                    {busyId === t.id
+                      ? "Saving…"
+                      : t.stageCode === "AUDIT_SCHEDULE"
+                      ? "Schedule Audit"
+                      : t.stageCode === "CLIENT_VISIT_ENG"
+                      ? (parseEngineerVisitState(t.validationData).visitStatus === "SCHEDULED"
+                          ? "Log Visit Result"
+                          : "Schedule Visit")
+                      : "Mark Done"}
+                  </button>
+                );
+              })()}
             </td>
           </tr>
         ))}

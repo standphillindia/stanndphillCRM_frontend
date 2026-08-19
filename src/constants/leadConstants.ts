@@ -14,15 +14,40 @@ export const LEAD_STATUSES = [
 
 export type LeadStatus = (typeof LEAD_STATUSES)[number]["value"];
 
+/**
+ * Backend Enum:
+ * MANUAL
+ * WEBSITE
+ * WHATSAPP
+ * JUSTDIAL
+ * META_ADS
+ * INSTAMART
+ */
 export const LEAD_SOURCES = [
-  { value: "MANUAL", label: "Manual" },
-  { value: "WEBSITE", label: "Website" },
-  { value: "PHONE", label: "Phone" },
-  { value: "EMAIL", label: "Email" },
-  { value: "REFERRAL", label: "Referral" },
-  { value: "SOCIAL_MEDIA", label: "Social Media" },
-  { value: "ADVERTISEMENT", label: "Advertisement" },
-  { value: "OTHER", label: "Other" },
+  {
+    value: "MANUAL",
+    label: "Phone",
+  },
+  {
+    value: "WEBSITE",
+    label: "Website",
+  },
+  {
+    value: "WHATSAPP",
+    label: "WhatsApp",
+  },
+  {
+    value: "JUSTDIAL",
+    label: "JustDial",
+  },
+  {
+    value: "META_ADS",
+    label: "Meta Ads",
+  },
+  {
+    value: "INSTAMART",
+    label: "Instamart",
+  },
 ] as const;
 
 export type LeadSource = (typeof LEAD_SOURCES)[number]["value"];

@@ -11,6 +11,12 @@ import {
   type InvoiceItemResponse,
 } from "../../services/invoiceService";
 import { SIGNATORIES } from "../../config/signatories";
+import {
+  DEFAULT_GST_RATE,
+  detectTaxType,
+  calculateTaxBreakdown,
+  type TaxType,
+} from "../../constants/taxConstants";
 
 interface Props {
   invoice: InvoiceDetailsResponse;
@@ -58,8 +64,26 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
   );
 
   const taxableAmount = items.reduce((sum, it) => sum + (it.amount || 0), 0);
-  const taxAmount = Math.round(taxableAmount * 0.18);
-  const totalAmount = taxableAmount + taxAmount;
+
+  // Items are editable in this modal, so the tax has to be re-derived as
+  // the user types. It used to be a bare Math.round(taxable * 0.18): that
+  // hardcoded the rate, always produced IGST, and rounded differently
+  // from the create form — so the preview could disagree with the figure
+  // actually stored by a rupee.
+  //
+  // The saved invoice's own taxType is trusted first; only when it's
+  // missing (legacy rows) do we fall back to detecting from the GSTIN.
+  const effectiveTaxType: TaxType =
+    invoice.taxType ?? detectTaxType(invoice.placeOfSupply, clientGst);
+
+  const tax = calculateTaxBreakdown(
+    taxableAmount,
+    effectiveTaxType,
+    invoice.gstRate ?? DEFAULT_GST_RATE
+  );
+
+  const taxAmount = tax.taxAmount;
+  const totalAmount = tax.totalAmount;
 
   const handleItemChange = (key: string, field: keyof InvoiceItemResponse, value: string | number) => {
     setItems((prev) =>
@@ -88,6 +112,8 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
         taxableAmount,
         taxAmount,
         totalAmount,
+        gstRate: invoice.gstRate ?? DEFAULT_GST_RATE,
+        taxType: effectiveTaxType,
         items: items.map((it) => ({
           description: it.description,
           sacCode: it.sacCode,
@@ -292,10 +318,14 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
               tax={{
                 nonTaxableAmount: 0,
                 taxableAmount,
-                cgst: 0,
-                sgst: 0,
-                igst: taxAmount,
+                cgst: tax.cgstAmount,
+                sgst: tax.sgstAmount,
+                igst: tax.igstAmount,
                 totalAmount,
+                taxType: effectiveTaxType,
+                cgstRate: tax.cgstRate,
+                sgstRate: tax.sgstRate,
+                igstRate: tax.igstRate,
               }}
             />
           </div>

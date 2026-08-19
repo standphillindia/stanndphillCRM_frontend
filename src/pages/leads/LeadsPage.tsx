@@ -4,6 +4,8 @@
 // All API calls, logic, and state are preserved exactly from the original.
 
 import { useEffect, useState, useMemo } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { decodeJwt } from "../../utils/jwt";
 import {
   fetchLeads,
   createLead,
@@ -100,7 +102,7 @@ const EMPTY_FORM: CreateLeadRequest = {
   product: "",
   certificationType: "",
   source: "MANUAL",
-  assignedToEmail: "",
+  // assignedToEmail intentionally omitted — backend auto-assigns via round-robin
 };
 
 // ── Form field config ─────────────────────────────────────────────────────────
@@ -122,7 +124,7 @@ const FORM_FIELDS = [
 function SkeletonRow() {
   return (
     <tr>
-      {[...Array(8)].map((_, i) => (
+      {[...Array(9)].map((_, i) => (
         <td key={i} className="px-6 py-4">
           <div className="h-4 bg-secondary-fixed/60 rounded animate-pulse" style={{ width: `${60 + (i % 3) * 20}%` }} />
         </td>
@@ -259,6 +261,13 @@ export default function LeadsPage() {
   // Status change inline
   const [statusLoading, setStatusLoading] = useState<string | null>(null);
 
+  // ── Current user role + email (from JWT) ──────────────────────────────────
+  const { token } = useAuth();
+  const decoded   = decodeJwt(token);
+  const myRole    = decoded?.role ?? "";          // "ADMIN", "SALES", etc.
+  const myEmail   = decoded?.sub  ?? "";          // logged-in user's email
+  const isSales   = myRole === "SALES";
+
   // ── Load ───────────────────────────────────────────────────────────────────
   const loadLeads = async (p = page) => {
     setLoading(true);
@@ -270,6 +279,8 @@ export default function LeadsPage() {
       if (search)                  params.search = search;
       if (statusFilter !== "ALL")  params.status = statusFilter as LeadStatus;
       if (sourceFilter)            params.source = sourceFilter;
+      // SALES users see only their own assigned leads; ADMIN sees all
+      if (isSales && myEmail)      params.assignedToEmail = myEmail;
 
       const data = await fetchLeads(params);
       setLeads(data.content);
@@ -611,7 +622,7 @@ export default function LeadsPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-container-highest/30 border-b border-outline-variant/20">
-                {["Name", "Company", "Status", "Product", "Source", "Date", "Follow-up", "Actions"].map((h, i) => (
+                {["Name", "Company", "Mobile", "Status", "Product", "Source", "Date", "Assigned To", "Follow-up", "Actions"].map((h, i) => (
                   <th
                     key={h}
                     className="px-6 py-4 text-label-caps text-outline uppercase tracking-wider whitespace-nowrap"
@@ -632,7 +643,7 @@ export default function LeadsPage() {
                 [...Array(5)].map((_, i) => <SkeletonRow key={i} />)
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={10}>
                     <div className="flex flex-col items-center gap-3 py-16 text-secondary">
                       <span
                         className="material-symbols-outlined text-[48px] text-outline"
@@ -685,6 +696,22 @@ export default function LeadsPage() {
                       {/* Company */}
                       <td className="px-6 py-4 text-body-md font-medium text-secondary whitespace-nowrap">
                         {lead.companyName || "—"}
+                      </td>
+
+                      {/* Mobile */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {lead.phone ? (
+                          <a
+                            href={`tel:${lead.phone}`}
+                            className="text-body-md text-secondary hover:text-primary
+                              hover:underline transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {lead.phone}
+                          </a>
+                        ) : (
+                          <span className="text-body-sm text-outline">—</span>
+                        )}
                       </td>
 
                       {/* Status */}
@@ -751,6 +778,22 @@ export default function LeadsPage() {
                       {/* Date */}
                       <td className="px-6 py-4 text-body-md text-secondary whitespace-nowrap">
                         {date}
+                      </td>
+
+                      {/* Assigned To */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {lead.assignedToEmail && lead.assignedToEmail !== "Unassigned" ? (
+                          <div className="flex items-center gap-2">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${avatarColor(lead.assignedToEmail)}`}>
+                              {initials(lead.assignedToEmail.split("@")[0])}
+                            </div>
+                            <span className="text-body-sm text-secondary max-w-[120px] truncate" title={lead.assignedToEmail}>
+                              {lead.assignedToEmail.split("@")[0]}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-body-sm text-outline italic">Unassigned</span>
+                        )}
                       </td>
 
                       {/* Follow-up */}
@@ -908,20 +951,12 @@ export default function LeadsPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Assign To" icon="manage_accounts">
-                <select
-                  required
-                  value={addForm.assignedToEmail}
-                  onChange={(e) => setAddForm((prev) => ({ ...prev, assignedToEmail: e.target.value }))}
-                  className={inputCls}
-                >
-                  <option value="" disabled>
-                    {salesUsers.length === 0 ? "No Sales users found" : "Select a Sales user"}
-                  </option>
-                  {salesUsers.map((u) => (
-                    <option key={u.id} value={u.email}>{u.fullName} ({u.email})</option>
-                  ))}
-                </select>
+              {/* Assign To field removed — backend auto-assigns via round-robin */}
+              <Field label="Auto Assignment" icon="manage_accounts">
+                <div className={`${inputCls} flex items-center gap-2 text-on-surface-variant bg-surface-variant/40 cursor-not-allowed`}>
+                  <span className="material-symbols-outlined text-[16px] text-primary">autorenew</span>
+                  <span className="text-body-sm">Will be auto-assigned via round-robin</span>
+                </div>
               </Field>
             </div>
 
@@ -1009,16 +1044,13 @@ export default function LeadsPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="Assign To" icon="manage_accounts">
+              <Field label="Reassign To (Optional)" icon="manage_accounts">
                 <select
-                  required
-                  value={editForm.assignedToEmail}
+                  value={editForm.assignedToEmail ?? ""}
                   onChange={(e) => setEditForm((prev) => ({ ...prev, assignedToEmail: e.target.value }))}
                   className={inputCls}
                 >
-                  <option value="" disabled>
-                    {salesUsers.length === 0 ? "No Sales users found" : "Select a Sales user"}
-                  </option>
+                  <option value="">— Keep current assignment —</option>
                   {salesUsers.map((u) => (
                     <option key={u.id} value={u.email}>{u.fullName} ({u.email})</option>
                   ))}

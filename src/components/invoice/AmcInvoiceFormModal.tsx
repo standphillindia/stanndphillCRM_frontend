@@ -4,14 +4,20 @@ import { useState, useEffect } from "react";
 import { X, Plus, Trash2 } from "lucide-react";
 import {
   createAmcInvoice,
-  calculateTax,
-  calculateTotal,
+  // (tax helpers now live in constants/taxConstants)
   getAmcInvoicesWithPayment,
   type InvoiceDetailsResponse,
   type AmcInvoicePaymentRow,
 } from "../../services/invoiceService";
 import type { AmcProject } from "../../modules/amc-frontend/services/amcService";
 import { SIGNATORIES } from "../../config/signatories";
+import {
+  DEFAULT_GST_RATE,
+  detectTaxType,
+  calculateTaxBreakdown,
+  formatRate,
+  type TaxType,
+} from "../../constants/taxConstants";
 
 interface AmcInvoiceFormModalProps {
   amc: AmcProject | null;
@@ -30,7 +36,8 @@ interface LineItem {
   amount: number;
 }
 
-const TAX_RATE = 18;
+// Tax is calculated by the backend on save. The helpers below drive
+// the live preview in this form only, and mirror the backend rules.
 
 export default function AmcInvoiceFormModal({
   amc,
@@ -41,6 +48,10 @@ export default function AmcInvoiceFormModal({
 }: AmcInvoiceFormModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // null = trust the auto-detection from the GSTIN. Set only when the
+  // user deliberately overrides the split; sent to the backend so the
+  // server records the same decision the user saw.
+  const [taxTypeOverride, setTaxTypeOverride] = useState<TaxType | null>(null);
 
   // Only relevant when invoiceType="TAX" — lets this TI be linked to an
   // existing PI right at creation, so it shows real payment status
@@ -116,8 +127,16 @@ export default function AmcInvoiceFormModal({
   };
 
   const taxableAmount = lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
-  const taxAmount = calculateTax(taxableAmount, TAX_RATE);
-  const totalAmount = calculateTotal(taxableAmount, taxAmount);
+
+  // Auto-detected from the client GSTIN, unless the user has picked a
+  // split manually. The backend re-runs this same decision on save, so
+  // this is a preview — it can never disagree with what gets stored.
+  const autoTaxType = detectTaxType(undefined, formData.clientGst);
+  const effectiveTaxType: TaxType = taxTypeOverride ?? autoTaxType;
+
+  const tax = calculateTaxBreakdown(taxableAmount, effectiveTaxType, DEFAULT_GST_RATE);
+  const taxAmount = tax.taxAmount;
+  const totalAmount = tax.totalAmount;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,6 +160,8 @@ export default function AmcInvoiceFormModal({
         taxableAmount,
         taxAmount,
         totalAmount,
+        gstRate: DEFAULT_GST_RATE,
+        taxType: effectiveTaxType,
         issueDate: new Date().toISOString().split("T")[0],
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
         remarks: formData.remarks,
@@ -314,15 +335,54 @@ export default function AmcInvoiceFormModal({
 
           <div className="border-b pb-4">
             <h3 className="font-semibold text-gray-700 mb-3">Financial Summary</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tax Type
+              </label>
+              <select
+                value={taxTypeOverride ?? "AUTO"}
+                onChange={(e) =>
+                  setTaxTypeOverride(
+                    e.target.value === "AUTO" ? null : (e.target.value as TaxType)
+                  )
+                }
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="AUTO">
+                  Auto-detect from GSTIN
+                  {" — "}
+                  {autoTaxType === "CGST_SGST" ? "CGST + SGST" : "IGST"}
+                </option>
+                <option value="CGST_SGST">CGST + SGST (within Uttar Pradesh)</option>
+                <option value="IGST">IGST (outside Uttar Pradesh)</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Detected from the client GSTIN. Change this only if the place of
+                supply differs from the GSTIN state.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                 <p className="text-sm text-gray-600 mb-1">Taxable Amount</p>
                 <p className="text-2xl font-bold text-blue-600">₹{taxableAmount.toLocaleString()}</p>
               </div>
-              <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
-                <p className="text-sm text-gray-600 mb-1">IGST ({TAX_RATE}%)</p>
-                <p className="text-2xl font-bold text-orange-600">₹{taxAmount.toLocaleString()}</p>
-              </div>
+              {effectiveTaxType === "CGST_SGST" ? (
+                <>
+                  <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                    <p className="text-sm text-gray-600 mb-1">CGST ({formatRate(tax.cgstRate)}%)</p>
+                    <p className="text-2xl font-bold text-orange-600">₹{tax.cgstAmount.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                    <p className="text-sm text-gray-600 mb-1">SGST ({formatRate(tax.sgstRate)}%)</p>
+                    <p className="text-2xl font-bold text-orange-600">₹{tax.sgstAmount.toLocaleString()}</p>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                  <p className="text-sm text-gray-600 mb-1">IGST ({formatRate(tax.igstRate)}%)</p>
+                  <p className="text-2xl font-bold text-orange-600">₹{tax.igstAmount.toLocaleString()}</p>
+                </div>
+              )}
               <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                 <p className="text-sm text-gray-600 mb-1">Total Amount</p>
                 <p className="text-2xl font-bold text-green-600">₹{totalAmount.toLocaleString()}</p>

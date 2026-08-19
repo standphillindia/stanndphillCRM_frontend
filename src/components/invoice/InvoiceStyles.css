@@ -327,6 +327,40 @@
   line-height: 1.6;
 }
 
+/* Bank details + UPI QR side by side (QR sits right of the text,
+   just before the tax column — same placement as the ARB Bearings PI).
+   Plain flex + fixed sizes: html2canvas-safe, no gradients/transforms. */
+.pi-bank-flex {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pi-bank-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pi-bank-qr {
+  flex: 0 0 auto;
+  text-align: center;
+  padding-top: 2px;
+}
+
+.pi-qr-img {
+  width: 92px;
+  height: 92px;
+  display: block;
+}
+
+.pi-qr-caption {
+  font-size: 9px;
+  font-weight: 600;
+  margin-top: 2px;
+  letter-spacing: 0.02em;
+}
+
 .pi-tax-cell {
   padding: 0 !important;
 }
@@ -439,24 +473,31 @@
   padding: 20px;
 }
 
+/* The signature now lives inside the tax cell, beside the UPI QR, rather
+   than floating under the whole table. Centred in the cell and padded to
+   clear the tax rows above it. Fixed px sizes only -- html2canvas ignores
+   transforms and some modern layout, so nothing here relies on them. */
 .pi-signature-block {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  margin: 24px 40px 0 auto;
-  width: 220px;
+  align-items: center;
+  width: 180px;
+  margin: 10px auto 6px auto;
   text-align: center;
 }
 
 .pi-signature-img {
-  width: 140px;
+  width: 110px;
   height: auto;
   object-fit: contain;
+  /* Keeps the stamp from overlapping the name line when the signature
+     image has a lot of vertical bleed. */
+  max-height: 52px;
 }
 
 .pi-signature-name {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12px;
   color: #231b4b;
   margin-top: 2px;
   width: 100%;

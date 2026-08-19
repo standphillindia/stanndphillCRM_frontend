@@ -1,6 +1,7 @@
 // src/services/invoiceService.ts
 
 import api from "../api/axios";
+import type { TaxType } from "../constants/taxConstants";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,17 @@ export interface CreateInvoiceRequest {
   issueDate: string; // YYYY-MM-DD
   dueDate: string;   // YYYY-MM-DD
   remarks?: string;
+
+  // Optional GST overrides. Leave both out and the backend picks the
+  // default 18% rate and works out CGST_SGST vs IGST itself from the
+  // client's GSTIN. Send taxType only when the user has deliberately
+  // overridden the auto-detected split in the form.
+  //
+  // NOTE: amount / taxableAmount / taxAmount / totalAmount above are
+  // still sent for backwards compatibility, but the backend no longer
+  // trusts them — it recalculates from the line items.
+  gstRate?: number;
+  taxType?: TaxType;
 }
 
 export interface InvoiceResponse {
@@ -48,7 +60,6 @@ export interface InvoiceResponse {
   totalAmount: number;
   issueDate: string;
   dueDate: string;
-  pdfPath?: string;
   sentDate?: string;
 }
 
@@ -136,16 +147,6 @@ export const getAllInvoices = async (): Promise<InvoiceResponse[]> => {
 };
 
 /**
- * Download Invoice PDF
- */
-export const downloadInvoicePdf = async (invoiceId: string): Promise<Blob> => {
-  const response = await api.get(`/finance/invoices/${invoiceId}/download`, {
-    responseType: "blob",
-  });
-  return response.data;
-};
-
-/**
  * Get Pending Finance Deals (need PI)
  */
 export const getPendingFinanceDeals = async (): Promise<FinanceDealResponse[]> => {
@@ -153,19 +154,10 @@ export const getPendingFinanceDeals = async (): Promise<FinanceDealResponse[]> =
   return response.data;
 };
 
-/**
- * Helper: Calculate tax (18% IGST)
- */
-export const calculateTax = (amount: number, taxRate: number = 18): number => {
-  return parseFloat(((amount * taxRate) / 100).toFixed(2));
-};
-
-/**
- * Helper: Calculate total
- */
-export const calculateTotal = (taxableAmount: number, taxAmount: number): number => {
-  return parseFloat((taxableAmount + taxAmount).toFixed(2));
-};
+// calculateTax / calculateTotal removed. They hardcoded 18% as IGST and
+// were duplicated (with different rounding) in utils/downloadInvoice.ts.
+// Tax is now calculated by the backend; for the live preview inside
+// invoice forms use calculateTaxBreakdown from constants/taxConstants.
 
 // ==========================================
 // ADD THESE FUNCTIONS TO YOUR invoiceService.ts
@@ -285,11 +277,26 @@ export interface InvoiceDetailsResponse {
   taxableAmount: number;
   taxAmount: number;
   totalAmount: number;
+
+  // GST breakdown, calculated and stored by the backend.
+  // Render these directly — do not recompute them client-side.
+  // `taxType` decides which rows the invoice shows:
+  //   CGST_SGST -> CGST + SGST rows,  IGST -> single IGST row.
+  // Null/undefined on legacy invoices created before the split
+  // existed; treat those as IGST, which is how they were printed.
+  taxType?: TaxType;
+  gstRate?: number;
+  cgstRate?: number;
+  cgstAmount?: number;
+  sgstRate?: number;
+  sgstAmount?: number;
+  igstRate?: number;
+  igstAmount?: number;
+
   issueDate: string;
   dueDate: string;
   sentDate?: string;
   remarks?: string;
-  pdfAvailable: boolean;
   signatoryName?: string;
   items: InvoiceItemResponse[];
 }
@@ -348,6 +355,11 @@ export const createAmcInvoice = async (
     // Optional manual override — leave blank to auto-generate PI-YYYY-NNNN.
     invoiceNumber?: string;
     signatoryName?: string;
+    // Optional GST overrides — the backend recalculates tax from the
+    // line items regardless, and falls back to auto-detection when
+    // taxType is omitted. See constants/taxConstants.
+    gstRate?: number;
+    taxType?: TaxType;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {
@@ -403,6 +415,11 @@ export const updateAmcInvoiceDetails = async (
     items?: InvoiceLineItemRequest[];
     invoiceNumber?: string;
     signatoryName?: string;
+    // Optional GST overrides — the backend recalculates tax from the
+    // line items regardless, and falls back to auto-detection when
+    // taxType is omitted. See constants/taxConstants.
+    gstRate?: number;
+    taxType?: TaxType;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.patch<InvoiceDetailsResponse>(
@@ -522,6 +539,11 @@ export const createProjectInvoice = async (
     sourcePiId?: string;
     invoiceNumber?: string;
     signatoryName?: string;
+    // Optional GST overrides — the backend recalculates tax from the
+    // line items regardless, and falls back to auto-detection when
+    // taxType is omitted. See constants/taxConstants.
+    gstRate?: number;
+    taxType?: TaxType;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {
@@ -589,6 +611,9 @@ export const createLeadInvoice = async (
     remarks?: string;
     items?: InvoiceLineItemRequest[];
     sourcePiId?: string;
+    // Optional GST overrides — see constants/taxConstants.
+    gstRate?: number;
+    taxType?: TaxType;
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {

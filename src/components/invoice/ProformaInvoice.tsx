@@ -1,7 +1,9 @@
 import React from "react";
 import "./InvoiceStyles.css";
+import UpiQr from "./UpiQr";
 import logo from "../../assets/invoicelogo.png";
 import { getSignatoryByName } from "../../config/signatories";
+import { formatRate, type TaxType } from "../../constants/taxConstants";
 
 export interface CustomerDetails {
   companyName: string;
@@ -38,6 +40,23 @@ export interface TaxDetails {
   sgst: number;
   igst: number;
   totalAmount: number;
+
+  // Which tax heads to print. Only one side is ever shown:
+  //   CGST_SGST -> the CGST and SGST rows (intra-state supply)
+  //   IGST      -> a single IGST row (inter-state supply)
+  //
+  // Printing all three heads with zeros against the unused ones is not
+  // a valid GST invoice, which is what this used to do.
+  //
+  // Optional so existing callers keep compiling; when omitted the type
+  // is inferred from whichever amount is non-zero, defaulting to IGST.
+  taxType?: TaxType;
+
+  // Rates actually applied, e.g. 9 and 9, or 18. Optional — falls back
+  // to the statutory 9/9/18 split when not supplied.
+  cgstRate?: number;
+  sgstRate?: number;
+  igstRate?: number;
 }
 
 export interface ProformaInvoiceProps {
@@ -75,6 +94,16 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({
   signatoryName,
 }) => {
   const isTax = invoiceType === "TAX";
+
+  // Which tax heads this invoice prints.
+  //
+  // `tax.taxType` is what the backend decided and is authoritative when
+  // present. Older callers don't pass it, so fall back to inferring from
+  // the amounts: any CGST/SGST value means an intra-state supply. An
+  // all-zero invoice (or a legacy IGST one) lands on IGST, which is how
+  // these were printed before the split existed.
+  const resolvedTaxType: TaxType =
+    tax.taxType ?? (tax.cgst > 0 || tax.sgst > 0 ? "CGST_SGST" : "IGST");
   const documentLabel = isTax ? "Tax Invoice" : "Proforma Invoice";
   const numberLabel = isTax ? "TI No:" : "PI No:";
   const signatory = getSignatoryByName(signatoryName);
@@ -338,6 +367,8 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({
             {/* BANK */}
 
             <td className="pi-bank-cell">
+              <div className="pi-bank-flex">
+                <div className="pi-bank-text">
               <div>
                 <strong>Bank Details:</strong>
               </div>
@@ -360,6 +391,17 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({
                 {" "}
                 {bank.ifscCode}
               </div>
+                </div>
+                <div className="pi-bank-qr">
+                  <UpiQr
+                    amount={tax.totalAmount}
+                    note={invoiceNo}
+                    alt="Scan to pay via UPI"
+                    className="pi-qr-img"
+                  />
+                  <div className="pi-qr-caption">Scan &amp; Pay (UPI)</div>
+                </div>
+              </div>
             </td>
 
             {/* GST TABLE */}
@@ -370,37 +412,61 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({
             >
               <table className="pi-tax-subtable">
                 <tbody>
-                  <tr>
-                    <td className="pi-tax-label">
-                      CGST (9%)
-                    </td>
+                  {resolvedTaxType === "CGST_SGST" ? (
+                    <>
+                      <tr>
+                        <td className="pi-tax-label">
+                          CGST ({formatRate(tax.cgstRate ?? 9)}%)
+                        </td>
 
-                    <td className="pi-tax-value pi-right">
-                      {tax.cgst.toLocaleString("en-IN")}
-                    </td>
-                  </tr>
+                        <td className="pi-tax-value pi-right">
+                          {tax.cgst.toLocaleString("en-IN")}
+                        </td>
+                      </tr>
 
-                  <tr>
-                    <td className="pi-tax-label">
-                      SGST (9%)
-                    </td>
+                      <tr>
+                        <td className="pi-tax-label">
+                          SGST ({formatRate(tax.sgstRate ?? 9)}%)
+                        </td>
 
-                    <td className="pi-tax-value pi-right">
-                      {tax.sgst.toLocaleString("en-IN")}
-                    </td>
-                  </tr>
+                        <td className="pi-tax-value pi-right">
+                          {tax.sgst.toLocaleString("en-IN")}
+                        </td>
+                      </tr>
+                    </>
+                  ) : (
+                    <tr>
+                      <td className="pi-tax-label">
+                        IGST ({formatRate(tax.igstRate ?? 18)}%)
+                      </td>
 
-                  <tr>
-                    <td className="pi-tax-label">
-                      IGST (18%)
-                    </td>
-
-                    <td className="pi-tax-value pi-right">
-                      {tax.igst.toLocaleString("en-IN")}
-                    </td>
-                  </tr>
+                      <td className="pi-tax-value pi-right">
+                        {tax.igst.toLocaleString("en-IN")}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
+
+              {/* Signature sits in this same cell, directly beside the UPI
+                  QR block. It used to float below the whole table, which
+                  left a large gap on short invoices and pushed the footer
+                  onto a second page. */}
+              {signatory && (
+                <div className="pi-signature-block">
+                  <img
+                    src={signatory.imageUrl}
+                    alt={`Signature of ${signatory.name}`}
+                    className="pi-signature-img"
+                  />
+                  <div className="pi-signature-name">
+                    {signatory.name}
+                  </div>
+                  <div className="pi-signature-label">
+                    Authorised Signatory
+                  </div>
+                </div>
+              )}
             </td>
           </tr>
 
@@ -417,25 +483,6 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({
           </tr>
         </tbody>
       </table>
-
-      {/* ==========================================================
-          SIGNATURE
-      ========================================================== */}
-      {signatory && (
-        <div className="pi-signature-block">
-          <img
-            src={signatory.imageUrl}
-            alt={`Signature of ${signatory.name}`}
-            className="pi-signature-img"
-          />
-          <div className="pi-signature-name">
-            {signatory.name}
-          </div>
-          <div className="pi-signature-label">
-            Authorised Signatory
-          </div>
-        </div>
-      )}
 
       {/* ==========================================================
           FOOTER

@@ -39,7 +39,10 @@ export interface CreateLeadRequest {
   product: string;
   certificationType: string;
   source: LeadSource;
-  assignedToEmail: string;
+  // ── CHANGED: now optional ────────────────────────────────────────────
+  // If omitted (or left blank), the backend auto-assigns via round-robin.
+  // Only send this when an admin/user explicitly picks a sales person.
+  assignedToEmail?: string;
   nextFollowUpDate?: string | null;
 }
 
@@ -174,6 +177,9 @@ export const reauthorizeLeadFinanceAccess = async (
 };
 
 // POST /api/leads
+// ── assignedToEmail is optional now ──────────────────────────────────
+// If you pass it, the backend assigns that specific person (manual override).
+// If you omit it, the backend round-robins to the next SALES user automatically.
 export const createLead = async (
   data: CreateLeadRequest
 ): Promise<LeadResponse> => {
@@ -246,6 +252,14 @@ export const getAdminLeads = async (): Promise<
     LeadResponse[]
   >("/leads/admin");
 
+  return res.data;
+};
+
+// GET /api/leads/finance — Pre-WON Finance page feed (ADMIN + FINANCE).
+// Replaces the old getAdminLeads() usage there, which 403s for Finance
+// since /leads/admin became ADMIN-only in the security hardening pass.
+export const getFinanceLeads = async (): Promise<LeadResponse[]> => {
+  const res = await api.get<LeadResponse[]>("/leads/finance");
   return res.data;
 };
 
