@@ -110,13 +110,18 @@ const EMPTY_FORM: CreateLeadRequest = {
 // longer appears in either the New Lead or Edit Lead forms. The table's
 // FOLLOW_UP status flow (unchanged) remains the only way to set/update it.
 
+// `optional: true` drops the browser's required-field block for that input.
+// Website enquiries routinely arrive with no email at all (call-back requests,
+// WhatsApp enquiries), and the backend has never required one — the form was
+// the only thing refusing to save. Phone stays mandatory: a lead with neither
+// an email nor a phone is unreachable and not worth a row.
 const FORM_FIELDS = [
-  { name: "companyName",       label: "Company Name",       type: "text",  placeholder: "ABC Pvt Ltd",          icon: "domain"          },
-  { name: "contactName",       label: "Contact Name",       type: "text",  placeholder: "Rahul Sharma",          icon: "person"          },
-  { name: "email",             label: "Email",              type: "email", placeholder: "rahul@abc.com",         icon: "mail"            },
-  { name: "phone",             label: "Phone",              type: "tel",   placeholder: "9876543210",            icon: "call"            },
-  { name: "product",           label: "Product",            type: "text",  placeholder: "ISO 9001",              icon: "inventory_2"     },
-  { name: "certificationType", label: "Certification Type", type: "text",  placeholder: "ISO",                   icon: "verified"        },
+  { name: "companyName",       label: "Company Name",       type: "text",  placeholder: "ABC Pvt Ltd",          icon: "domain",      optional: false },
+  { name: "contactName",       label: "Contact Name",       type: "text",  placeholder: "Rahul Sharma",          icon: "person",      optional: false },
+  { name: "email",             label: "Email",              type: "email", placeholder: "rahul@abc.com",         icon: "mail",        optional: true  },
+  { name: "phone",             label: "Phone",              type: "tel",   placeholder: "9876543210",            icon: "call",        optional: false },
+  { name: "product",           label: "Product",            type: "text",  placeholder: "ISO 9001",              icon: "inventory_2", optional: true  },
+  { name: "certificationType", label: "Certification Type", type: "text",  placeholder: "ISO",                   icon: "verified",    optional: true  },
 ] as const;
 
 // ── Skeleton row ──────────────────────────────────────────────────────────────
@@ -156,10 +161,12 @@ function Modal({ onClose, children }: { onClose: () => void; children: React.Rea
 function Field({
   label,
   icon,
+  optional,
   children,
 }: {
   label: string;
   icon: string;
+  optional?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -167,6 +174,9 @@ function Field({
       <label className="text-label-caps text-on-surface-variant uppercase tracking-wider flex items-center gap-1.5">
         <span className="material-symbols-outlined text-[14px]">{icon}</span>
         {label}
+        {optional && (
+          <span className="normal-case tracking-normal text-secondary/70">(optional)</span>
+        )}
       </label>
       {children}
     </div>
@@ -215,6 +225,17 @@ export default function LeadsPage() {
     fetchDepartments().then(setDepartments).catch(() => setDepartments([]));
     fetchUsers({ role: "SALES" }).then(setSalesUsers).catch(() => setSalesUsers([]));
   }, []);
+
+  // Leads only carry the assignee's email. Resolve it to a name for display;
+  // fall back to the local part of the address so a removed user still shows
+  // something recognisable rather than an empty cell.
+  const assigneeName = (email?: string | null) => {
+    if (!email || email === "Unassigned") return "";
+    const match = salesUsers.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase()
+    );
+    return match?.fullName || email.split("@")[0];
+  };
 
   // ── FOLLOW UP Modal State (unchanged — table's status flow) ──────────────
   const [followUpLead, setFollowUpLead] = useState<LeadResponse | null>(null);
@@ -784,11 +805,11 @@ export default function LeadsPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         {lead.assignedToEmail && lead.assignedToEmail !== "Unassigned" ? (
                           <div className="flex items-center gap-2">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${avatarColor(lead.assignedToEmail)}`}>
-                              {initials(lead.assignedToEmail.split("@")[0])}
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${avatarColor(assigneeName(lead.assignedToEmail))}`}>
+                              {initials(assigneeName(lead.assignedToEmail))}
                             </div>
-                            <span className="text-body-sm text-secondary max-w-[120px] truncate" title={lead.assignedToEmail}>
-                              {lead.assignedToEmail.split("@")[0]}
+                            <span className="text-body-sm text-secondary max-w-[140px] truncate" title={lead.assignedToEmail}>
+                              {assigneeName(lead.assignedToEmail)}
                             </span>
                           </div>
                         ) : (
@@ -928,11 +949,11 @@ export default function LeadsPage() {
           <form onSubmit={handleAdd} className="p-6 space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {FORM_FIELDS.map((f) => (
-                <Field key={f.name} label={f.label} icon={f.icon}>
+                <Field key={f.name} label={f.label} icon={f.icon} optional={f.optional}>
                   <input
                     type={f.type}
                     placeholder={f.placeholder}
-                    required
+                    required={!f.optional}
                     value={addForm[f.name] ?? ""}
                     onChange={(e) => setAddForm((prev) => ({ ...prev, [f.name]: e.target.value }))}
                     className={inputCls}
@@ -1021,11 +1042,11 @@ export default function LeadsPage() {
           <form onSubmit={handleEdit} className="p-6 space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {FORM_FIELDS.map((f) => (
-                <Field key={f.name} label={f.label} icon={f.icon}>
+                <Field key={f.name} label={f.label} icon={f.icon} optional={f.optional}>
                   <input
                     type={f.type}
                     placeholder={f.placeholder}
-                    required
+                    required={!f.optional}
                     value={editForm[f.name] ?? ""}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, [f.name]: e.target.value }))}
                     className={inputCls}

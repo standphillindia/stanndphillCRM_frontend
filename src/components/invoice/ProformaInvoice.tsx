@@ -392,15 +392,21 @@ const ProformaInvoice: React.FC<ProformaInvoiceProps> = ({
                 {bank.ifscCode}
               </div>
                 </div>
-                <div className="pi-bank-qr">
-                  <UpiQr
-                    amount={tax.totalAmount}
-                    note={invoiceNo}
-                    alt="Scan to pay via UPI"
-                    className="pi-qr-img"
-                  />
-                  <div className="pi-qr-caption">Scan &amp; Pay (UPI)</div>
-                </div>
+                {/* PI only. A Tax Invoice is raised after the money has
+                    already come in, so a "Scan & Pay" QR on it invites a
+                    duplicate payment. Bank details stay on both — they're
+                    still the reference record for the transaction. */}
+                {!isTax && (
+                  <div className="pi-bank-qr">
+                    <UpiQr
+                      amount={tax.totalAmount}
+                      note={invoiceNo}
+                      alt="Scan to pay via UPI"
+                      className="pi-qr-img"
+                    />
+                    <div className="pi-qr-caption">Scan &amp; Pay (UPI)</div>
+                  </div>
+                )}
               </div>
             </td>
 

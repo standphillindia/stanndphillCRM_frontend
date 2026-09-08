@@ -7,6 +7,9 @@ import ProtectedRoute from "../components/ProtectedRoute";
 import AdminRoute from "../components/AdminRoute";
 import MainLayout from "../layouts/main-layouts";
 
+import IndependentProjectsList from "../modules/payment/pages/IndependentProjectsList";
+import IndependentProjectDetails from "../modules/payment/pages/IndependentProjectDetails";
+
 // Page imports
 import LoginPage from "../pages/auth/LoginPage";
 import DashboardPage from "../pages/dashboard/DashboardPage";
@@ -69,6 +72,13 @@ export default function AppRouter() {
             <Route path="amc/:amcId" element={<AmcPaymentDetails />} />
             <Route path="leads" element={<LeadPaymentsList />} />
             <Route path="lead/:leadId" element={<LeadPaymentDetails />} />
+            {/* FIX: these two were previously sitting outside this block
+                (between /dashboard and /leads at the top level), which made
+                them resolve to "/independent" instead of
+                "/payments/independent" — no route ever matched the sidebar
+                link, so the catch-all rule below sent it to /login. */}
+            <Route path="independent" element={<IndependentProjectsList />} />
+            <Route path="independent/:independentProjectId" element={<IndependentProjectDetails />} />
           </Route>
 
           <Route path="/documents" element={<DocumentsPage />} />

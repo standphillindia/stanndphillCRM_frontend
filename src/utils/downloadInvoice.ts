@@ -11,6 +11,21 @@ import jsPDF from "jspdf";
 // PDF DOWNLOAD FUNCTIONS (Your Existing Code)
 // ════════════════════════════════════════════════════════════════
 
+/**
+ * Anything left over below this many millimetres is trailing whitespace from
+ * the rendered element (margins, a stray border), not real content. Spilling
+ * it onto a second page produced the blank page 2 every invoice used to have.
+ */
+const OVERFLOW_TOLERANCE_MM = 4;
+
+/**
+ * If the capture is only marginally taller than one A4 page, shrink it to fit
+ * rather than splitting it. An invoice that runs 3-8% over is a layout
+ * rounding artefact — nobody wants a second page holding two lines of footer.
+ * Beyond this the content is genuinely long and gets paginated properly.
+ */
+const FIT_TO_ONE_PAGE_THRESHOLD = 1.08;
+
 export async function downloadElementAsPdf(
   elementId: string,
   fileName: string = "invoice.pdf"
@@ -36,16 +51,35 @@ export async function downloadElementAsPdf(
   const pdfWidth = pdf.internal.pageSize.getWidth();
   const pdfHeight = pdf.internal.pageSize.getHeight();
 
-  const imgWidth = pdfWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  let imgWidth = pdfWidth;
+  let imgHeight = (canvas.height * imgWidth) / canvas.width;
 
+  // ── Case 1: fits on one page (with or without a small shrink) ──────────
+  if (imgHeight <= pdfHeight * FIT_TO_ONE_PAGE_THRESHOLD) {
+    if (imgHeight > pdfHeight) {
+      // Scale down proportionally and centre horizontally so the invoice
+      // still looks deliberate rather than cropped.
+      const scale = pdfHeight / imgHeight;
+      imgWidth = imgWidth * scale;
+      imgHeight = pdfHeight;
+    }
+
+    const xOffset = (pdfWidth - imgWidth) / 2;
+    pdf.addImage(imgData, "PNG", xOffset, 0, imgWidth, imgHeight, undefined, "FAST");
+    pdf.save(fileName);
+    return;
+  }
+
+  // ── Case 2: genuinely multi-page content ──────────────────────────────
   let remainingHeight = imgHeight;
   let position = 0;
 
   pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight, undefined, "FAST");
   remainingHeight -= pdfHeight;
 
-  while (remainingHeight > 0) {
+  // Tolerance instead of `> 0`: without it, a sub-millimetre remainder still
+  // satisfied the condition and jsPDF happily emitted an empty page.
+  while (remainingHeight > OVERFLOW_TOLERANCE_MM) {
     position = remainingHeight - imgHeight;
     pdf.addPage();
     pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight, undefined, "FAST");

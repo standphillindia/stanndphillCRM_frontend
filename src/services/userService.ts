@@ -63,6 +63,7 @@ export interface UpdateUserRequest {
   phone?: string;
   role?: UserRole;
   team?: string;
+  department?: string;
 }
 
 export interface UserFilterParams {
@@ -166,6 +167,7 @@ interface BackendUserResponse {
   id: string;
   fullName: string;
   email: string;
+  phone?: string | null;
   active: boolean;
   roleId?: string;
   roleName?: string;
@@ -181,6 +183,7 @@ const mapBackendUser = (u: BackendUserResponse): UserResponse => ({
   id: u.id,
   fullName: u.fullName,
   email: u.email,
+  phone: u.phone ?? undefined,
   role: (u.roleName as UserRole) ?? "OPERATIONS",
   team: u.teamName,
   department: u.departmentName,
@@ -276,18 +279,19 @@ export const updateUser = async (
   id: string,
   data: UpdateUserRequest
 ): Promise<UserResponse> => {
-  if (USE_MOCK_DATA) {
-    await delay();
-    const idx = mockUsers.findIndex((u) => u.id === id);
-    if (idx === -1) throw new Error("User not found");
+  // Always hits the real backend. This used to fall through to mockUsers,
+  // which of course never contained the real user ids — every save came back
+  // with a misleading "User not found" that looked like a validation error.
+  const res = await api.patch<BackendUserResponse>(`/org/users/${id}`, {
+    fullName: data.fullName,
+    email: data.email,
+    phone: data.phone,
+    roleName: data.role,
+    teamName: data.team,
+    departmentName: data.department,
+  });
 
-    mockUsers[idx] = { ...mockUsers[idx], ...data };
-    return mockUsers[idx];
-  }
-
-  // const res = await api.patch<UserResponse>(`/users/${id}`, data);
-  // return res.data;
-  throw new Error("Real PATCH /api/users/{id} endpoint not implemented yet");
+  return mapBackendUser(res.data);
 };
 
 // ─────────────────────────────────────────────────────────────

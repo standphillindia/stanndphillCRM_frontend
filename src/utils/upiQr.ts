@@ -13,7 +13,7 @@
 import QRCode from "qrcode";
 
 // ── Standphill UPI identity (PhonePe / HDFC Bank - 3304) ────────────────
-export const UPI_PAYEE_VPA = "9667674225@ibl";
+export const UPI_PAYEE_VPA = "8527930453@ibl";
 export const UPI_PAYEE_NAME = "STANDPHILL INDIA";
 
 export interface UpiQrOptions {

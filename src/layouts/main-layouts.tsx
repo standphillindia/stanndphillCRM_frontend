@@ -94,6 +94,11 @@ const NAV_ITEMS: NavItemConfig[] = [
         icon: "list",
       },
       {
+        path: "/payments/independent",
+        label: "Independent",
+        icon: "folder_open",
+      },
+      {
         path: "/payments/amc",
         label: "AMC",
         icon: "security",
@@ -139,23 +144,23 @@ const NAV_ITEMS: NavItemConfig[] = [
 
 // Map route → page title shown in topbar
 const PAGE_TITLES: Record<string, string> = {
-  "/dashboard":           "Dashboard",
-  "/leads":               "Leads",
-  "/leads/amc-leads":     "AMC Leads",
-  "/projects":            "Projects",
-  "/payments":            "Payments",
-  "/payments/dashboard":  "Payment Dashboard",
-  "/payments/leads":      "Leads — Pre-WON Finance",
-  "/payments/list":       "Payments",
-  "/payments/amc":        "AMC Payments",
-  "/documents":           "Documents",
-  "/certifications":      "Certifications",
-  "/users":               "Users",
-  "/amc":                 "AMC",
-  "/amc/dashboard":       "AMC Dashboard",
-  "/amc/list":            "AMC Contracts",
-  "/amc/create":          "Create AMC",
-  "/admin":               "Admin Panel",
+  "/dashboard": "Dashboard",
+  "/leads": "Leads",
+  "/leads/amc-leads": "AMC Leads",
+  "/projects": "Projects",
+  "/payments": "Payments",
+  "/payments/dashboard": "Payment Dashboard",
+  "/payments/leads": "Leads — Pre-WON Finance",
+  "/payments/list": "Payments",
+  "/payments/amc": "AMC Payments",
+  "/documents": "Documents",
+  "/certifications": "Certifications",
+  "/users": "Users",
+  "/amc": "AMC",
+  "/amc/dashboard": "AMC Dashboard",
+  "/amc/list": "AMC Contracts",
+  "/amc/create": "Create AMC",
+  "/admin": "Admin Panel",
 };
 // NOTE: userEmail used to be a module-level `const` here, evaluated once
 // when this JS module first loaded — almost always BEFORE login, when
@@ -167,11 +172,7 @@ const PAGE_TITLES: Record<string, string> = {
 // Fixed by reading it fresh inside the component instead (see
 // SidebarContent below).
 // ── Sidebar content (shared between desktop fixed + mobile drawer) ────────────
-function SidebarContent({
-  onNavClick,
-}: {
-  onNavClick?: () => void;
-}) {
+function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { token } = useAuth();
@@ -195,7 +196,10 @@ function SidebarContent({
   // (no role restriction) — the same data source TasksPage.tsx (Urgent Tasks)
   // itself reads from. NOTE: this is NOT the project stage-tracker ("My
   // Tasks") — that page uses a different service (projectStageService).
-  const [taskCounts, setTaskCounts] = useState<{ pending: number; overdue: number } | null>(null);
+  const [taskCounts, setTaskCounts] = useState<{
+    pending: number;
+    overdue: number;
+  } | null>(null);
 
   useEffect(() => {
     const email = localStorage.getItem("userEmail");
@@ -203,7 +207,12 @@ function SidebarContent({
 
     // size: 200 is a practical cap for a sidebar badge — comfortably covers
     // one person's realistic open-task load without extra round trips.
-    fetchTasks({ assignedToEmail: email, size: 200, sortBy: "dueDate", sortDir: "asc" })
+    fetchTasks({
+      assignedToEmail: email,
+      size: 200,
+      sortBy: "dueDate",
+      sortDir: "asc",
+    })
       .then((res) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -226,9 +235,9 @@ function SidebarContent({
       .catch(() => setTaskCounts(null)); // fail silent — badge just won't show
   }, []);
 
-  const visibleNavItems = (
-    allowedModules === null ? [] : NAV_ITEMS
-  ).filter((item) => !item.module || allowedModules!.includes(item.module));
+  const visibleNavItems = (allowedModules === null ? [] : NAV_ITEMS).filter(
+    (item) => !item.module || allowedModules!.includes(item.module),
+  );
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -239,9 +248,7 @@ function SidebarContent({
   const isActive = (path: string) => location.pathname.startsWith(path);
   const toggleExpand = (path: string) => {
     setExpandedItems((prev) =>
-      prev.includes(path)
-        ? prev.filter((p) => p !== path)
-        : [...prev, path]
+      prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path],
     );
   };
 
@@ -393,7 +400,6 @@ function SidebarContent({
 
   return (
     <div className="flex flex-col h-full">
-
       {/* ── Brand ──────────────────────────────────────────────────────────── */}
       <div className="px-6 py-7 border-b border-outline-variant/10">
         <div className="flex items-center gap-3">
@@ -457,7 +463,9 @@ function SidebarContent({
             text-secondary hover:bg-error-container/40 hover:text-error
             transition-colors duration-150 disabled:opacity-50"
         >
-          <span className="material-symbols-outlined text-[20px] shrink-0">logout</span>
+          <span className="material-symbols-outlined text-[20px] shrink-0">
+            logout
+          </span>
           {loggingOut ? "Signing out…" : "Sign out"}
         </button>
       </div>
@@ -477,7 +485,7 @@ export default function MainLayout() {
   // if it's genuinely missing, NotificationBell just won't have anything
   // to fetch for, which is safer than silently impersonating admin.
   const [userEmail, setUserEmail] = useState(
-    () => localStorage.getItem("userEmail") || ""
+    () => localStorage.getItem("userEmail") || "",
   );
 
   useEffect(() => {
@@ -487,7 +495,7 @@ export default function MainLayout() {
   const pageTitle =
     PAGE_TITLES[location.pathname] ??
     Object.entries(PAGE_TITLES).find(([k]) =>
-      location.pathname.startsWith(k)
+      location.pathname.startsWith(k),
     )?.[1] ??
     "Dashboard";
 
@@ -497,7 +505,6 @@ export default function MainLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-
       {/* ── Mobile overlay ─────────────────────────────────────────────────── */}
       {mobileOpen && (
         <div
@@ -522,14 +529,14 @@ export default function MainLayout() {
 
       {/* ── Right side: topbar + page content ────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-
         {/* Topbar */}
-        <header className="sticky top-0 z-40 h-16 shrink-0
+        <header
+          className="sticky top-0 z-40 h-16 shrink-0
           bg-surface/70 backdrop-blur-xl
           border-b border-outline-variant/10
           flex items-center justify-between
-          px-4 lg:px-8 gap-4">
-
+          px-4 lg:px-8 gap-4"
+        >
           {/* Left: hamburger (mobile) + page title */}
           <div className="flex items-center gap-3">
             <button
@@ -537,13 +544,14 @@ export default function MainLayout() {
               className="lg:hidden p-2 rounded-full hover:bg-surface-container-high/50 transition-all text-on-surface-variant"
               aria-label="Open menu"
             >
-              <span className="material-symbols-outlined text-[22px]">menu</span>
+              <span className="material-symbols-outlined text-[22px]">
+                menu
+              </span>
             </button>
-            
           </div>
           <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                    <NotificationBell userEmail={userEmail} />
-                    {/* <button
+            <NotificationBell userEmail={userEmail} />
+            {/* <button
                       style={{
                         padding: "8px 12px",
                         background: "none",
@@ -555,8 +563,8 @@ export default function MainLayout() {
                     >
                       ⚙️
                     </button> */}
-                  </div>
-          
+          </div>
+
           {/* <div className="flex items-center gap-1">
             
             <div className="hidden md:flex items-center gap-2
@@ -597,17 +605,19 @@ export default function MainLayout() {
       </div>
 
       {/* ── Mobile bottom nav bar ─────────────────────────────────────────── */}
-      <nav className="lg:hidden fixed bottom-0 left-0 w-full
+      <nav
+        className="lg:hidden fixed bottom-0 left-0 w-full
         bg-surface/80 backdrop-blur-xl
         border-t border-outline-variant/10
         flex justify-around items-center px-4 py-2
         z-40 rounded-t-xl shadow-lg"
-        style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
+        style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}
+      >
         {[
           { path: "/dashboard", icon: "dashboard" },
-          { path: "/leads",     icon: "person_search" },
-          { path: "/projects",  icon: "business_center" },
-          { path: "/payments",  icon: "payments" },
+          { path: "/leads", icon: "person_search" },
+          { path: "/projects", icon: "business_center" },
+          { path: "/payments", icon: "payments" },
         ].map((item) => (
           <NavLink
             key={item.path}

@@ -633,4 +633,147 @@ export const createLeadInvoice = async (
 export const getLeadInvoicesWithPayment = async (leadId: string): Promise<ProjectInvoicePaymentRow[]> => {
   const response = await api.get<ProjectInvoicePaymentRow[]>(`/finance/invoices/lead/${leadId}/with-payment`);
   return response.data;
+};// ==========================================
+// INDEPENDENT PROJECTS — for legacy/external work (100+ projects that
+// pre-date the CRM) that isn't tracked as a real Project/AMC/Lead. Same
+// PI -> Payment -> TI mechanics as Project/AMC, grouped under a
+// lightweight "IndependentProject" container instead of a full Project.
+// Append this whole block to the end of invoiceService.ts.
+// ==========================================
+
+export interface IndependentProjectResponse {
+  id: string;
+  projectName: string;
+  certificationType?: string;
+  clientName: string;
+  contractAmount: number;
+  totalReceived: number;
+  totalPending: number;
+  piCount: number;
+  tiCount: number;
+  createdAt: string;
+}
+
+export interface IndependentProjectDetailsResponse {
+  id: string;
+  projectName: string;
+  certificationType?: string;
+  clientName: string;
+  clientEmail?: string;
+  clientGst?: string;
+  billingAddress?: string;
+  clientContactPerson?: string;
+  clientPhone?: string;
+  contractAmount: number;
+  carriedForwardReceivedAmount: number;
+  totalReceived: number;
+  totalPending: number;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface CreateIndependentProjectRequest {
+  projectName: string;
+  certificationType?: string;
+  clientName: string;
+  clientEmail?: string;
+  clientGst?: string;
+  billingAddress?: string;
+  clientContactPerson?: string;
+  clientPhone?: string;
+  contractAmount: number;
+  // Money already collected before this record was entered into the CRM.
+  // Omit or send 0 for genuinely new/untouched legacy work.
+  carriedForwardReceivedAmount?: number;
+  notes?: string;
+}
+
+/**
+ * Create a new Independent Project record — just the container (name,
+ * client info, contract value, optional already-received amount). No
+ * PI/TI created yet; that happens separately once you open the record.
+ */
+export const createIndependentProject = async (
+  req: CreateIndependentProjectRequest
+): Promise<IndependentProjectResponse> => {
+  const response = await api.post<IndependentProjectResponse>(
+    "/finance/independent-projects",
+    req
+  );
+  return response.data;
+};
+
+/**
+ * All Independent Project records — powers the Payments -> Independent
+ * list page (same shape as the "All Projects" table: contract/received/
+ * pending/PI count/TI count).
+ */
+export const getIndependentProjects = async (): Promise<IndependentProjectResponse[]> => {
+  const response = await api.get<IndependentProjectResponse[]>("/finance/independent-projects");
+  return response.data;
+};
+
+export const getIndependentProjectById = async (
+  id: string
+): Promise<IndependentProjectDetailsResponse> => {
+  const response = await api.get<IndependentProjectDetailsResponse>(
+    `/finance/independent-projects/${id}`
+  );
+  return response.data;
+};
+
+/**
+ * Create a PI or TI against an Independent Project — same shape/behaviour
+ * as createProjectInvoice, just scoped to a lightweight container instead
+ * of a real Project.
+ */
+export const createIndependentInvoice = async (
+  independentProjectId: string,
+  invoiceType: "PROFORMA" | "TAX",
+  req: {
+    clientName: string;
+    clientEmail: string;
+    clientGst: string;
+    billingAddress: string;
+    amount: number;
+    taxableAmount: number;
+    taxAmount: number;
+    totalAmount: number;
+    issueDate: string;
+    dueDate: string;
+    remarks?: string;
+    items?: InvoiceLineItemRequest[];
+    sourcePiId?: string;
+    invoiceNumber?: string;
+    signatoryName?: string;
+    gstRate?: number;
+    taxType?: TaxType;
+  }
+): Promise<InvoiceDetailsResponse> => {
+  const response = await api.post<InvoiceDetailsResponse>(
+    `/finance/invoices/independent-project/${independentProjectId}`,
+    {
+      ...req,
+      // These three MUST be in the body. Without invoiceType the backend
+      // can't tell a PI from a TI, and without referenceType it rejects
+      // the request outright.
+      invoiceType,
+      referenceType: "INDEPENDENT",
+      independentProjectId,
+    }
+  );
+  return response.data;
+};
+
+/**
+ * PI + TI rows for an Independent Project combined with payment tracking
+ * (Total/Received/Pending/Status) — same row shape as Project/AMC.
+ */
+export const getIndependentProjectInvoicesWithPayment = async (
+  independentProjectId: string
+): Promise<ProjectInvoicePaymentRow[]> => {
+  const response = await api.get<ProjectInvoicePaymentRow[]>(
+    `/finance/invoices/independent-project/${independentProjectId}/with-payment`
+  );
+  return response.data;
 };

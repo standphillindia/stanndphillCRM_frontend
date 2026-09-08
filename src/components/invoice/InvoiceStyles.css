@@ -481,18 +481,16 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 180px;
+  width: 200px;
   margin: 10px auto 6px auto;
   text-align: center;
 }
 
 .pi-signature-img {
-  width: 110px;
+  width: 160px;        /* pehle 110px */
   height: auto;
   object-fit: contain;
-  /* Keeps the stamp from overlapping the name line when the signature
-     image has a lot of vertical bleed. */
-  max-height: 52px;
+  max-height: 78px;    /* pehle 52px */
 }
 
 .pi-signature-name {

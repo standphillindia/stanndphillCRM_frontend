@@ -18,6 +18,7 @@ import {
   type AMCLeadSource,
   type AMCLeadStatus,
 } from "../../constants/amcLeadConstants";
+import { fetchUsers, type UserResponse as OrgUserResponse } from "../../services/userService";
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; label: string }> = {
   NEW: { bg: "bg-primary/10", text: "text-primary", border: "border-primary/20", label: "New" },
@@ -71,7 +72,7 @@ const inputCls = "w-full px-3 py-2.5 bg-surface border border-outline-variant/30
 function SkeletonRow() {
   return (
     <tr>
-      {[...Array(8)].map((_, i) => (
+      {[...Array(9)].map((_, i) => (
         <td key={i} className="px-6 py-4">
           <div className="h-4 bg-secondary-fixed/60 rounded animate-pulse" style={{ width: `${60 + (i % 3) * 20}%` }} />
         </td>
@@ -129,6 +130,11 @@ export default function AMCLeadsPage() {
   // transitionAMCLead() API call already existed and worked fine — this
   // page just never had any UI wired to actually call it.
   const [statusLoading, setStatusLoading] = useState<string | null>(null);
+
+  // Assignable users. AMC follow-up is sales work, so the picker lists the
+  // Sales team — typing an email by hand was easy to get wrong (one wrong
+  // character and the lead silently belonged to nobody).
+  const [salesUsers, setSalesUsers] = useState<OrgUserResponse[]>([]);
 
   // ── FOLLOW UP Modal State ──────────────────────────────────────────────────
   const [followUpLead, setFollowUpLead] = useState<AMCLeadResponse | null>(null);
@@ -241,6 +247,21 @@ export default function AMCLeadsPage() {
   useEffect(() => {
     loadAMCLeads(page);
   }, [page]);
+
+  useEffect(() => {
+    fetchUsers({ role: "SALES" }).then(setSalesUsers).catch(() => setSalesUsers([]));
+  }, []);
+
+  // The API only stores the assignee's email. Show the person's name where we
+  // can resolve it, and fall back to the email so a user who has since been
+  // removed still renders something meaningful instead of a blank cell.
+  const assigneeName = (email?: string | null) => {
+    if (!email) return "";
+    const match = salesUsers.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase()
+    );
+    return match?.fullName || email;
+  };
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -426,7 +447,7 @@ export default function AMCLeadsPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-container-highest/30 border-b border-outline-variant/20">
-                {["Company", "Contact", "Email", "Certificate", "Date", "Follow-up", "Status", "Actions"].map((h, i) => (
+                {["Company", "Contact", "Email", "Certificate", "Date", "Follow-up", "Assigned To", "Status", "Actions"].map((h, i) => (
                   <th key={h} className="px-6 py-4 text-label-caps text-outline uppercase tracking-wider whitespace-nowrap">
                     <div className="flex items-center gap-1">
                       {h}
@@ -442,7 +463,7 @@ export default function AMCLeadsPage() {
                 [...Array(5)].map((_, i) => <SkeletonRow key={i} />)
               ) : amcLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className="flex flex-col items-center gap-3 py-16 text-secondary">
                       <span className="material-symbols-outlined text-[48px] text-outline" style={{ fontVariationSettings: "'FILL' 0, 'wght' 200, 'GRAD' 0, 'opsz' 48" }}>
                         person_search
@@ -500,6 +521,21 @@ export default function AMCLeadsPage() {
                           </span>
                         ) : (
                           <span className="text-body-sm text-outline">—</span>
+                        )}
+                      </td>
+
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {amcLead.assignedToEmail ? (
+                          <div className="flex items-center gap-2">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${avatarColor(assigneeName(amcLead.assignedToEmail))}`}>
+                              {initials(assigneeName(amcLead.assignedToEmail))}
+                            </div>
+                            <span className="text-body-md text-secondary" title={amcLead.assignedToEmail}>
+                              {assigneeName(amcLead.assignedToEmail)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-body-sm text-outline">Unassigned</span>
                         )}
                       </td>
 
@@ -624,7 +660,16 @@ export default function AMCLeadsPage() {
                 </select>
               </Field>
               <Field label="Assigned To" icon="person_add">
-                <input type="email" placeholder="user@standphill.com" value={addForm.assignedToEmail} onChange={(e) => setAddForm((prev) => ({ ...prev, assignedToEmail: e.target.value }))} className={inputCls} />
+                <select
+                  value={addForm.assignedToEmail}
+                  onChange={(e) => setAddForm((prev) => ({ ...prev, assignedToEmail: e.target.value }))}
+                  className={inputCls}
+                >
+                  <option value="">— Unassigned —</option>
+                  {salesUsers.map((u) => (
+                    <option key={u.id} value={u.email}>{u.fullName} ({u.email})</option>
+                  ))}
+                </select>
               </Field>
             </div>
 
@@ -700,7 +745,16 @@ export default function AMCLeadsPage() {
                 </select>
               </Field>
               <Field label="Assigned To" icon="person_add">
-                <input type="email" value={editForm.assignedToEmail} onChange={(e) => setEditForm((prev) => ({ ...prev, assignedToEmail: e.target.value }))} className={inputCls} />
+                <select
+                  value={editForm.assignedToEmail ?? ""}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, assignedToEmail: e.target.value }))}
+                  className={inputCls}
+                >
+                  <option value="">— Unassigned —</option>
+                  {salesUsers.map((u) => (
+                    <option key={u.id} value={u.email}>{u.fullName} ({u.email})</option>
+                  ))}
+                </select>
               </Field>
             </div>
 
