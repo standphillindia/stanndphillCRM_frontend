@@ -339,6 +339,13 @@ export default function NotificationsPage() {
           outline: none;
           background: #fff;
         }
+        /* Phone: smaller side padding, search and filter on separate rows. */
+        @media (max-width: 640px) {
+          .notifications-header { padding: 14px 16px !important; }
+          .notif-filter-grid { grid-template-columns: 1fr !important; }
+          .notif-content { padding: 16px !important; }
+          .notif-title-row { flex-wrap: wrap; gap: 10px; }
+        }
       `}</style>
 
       <div
@@ -349,7 +356,7 @@ export default function NotificationsPage() {
           padding: "20px 32px",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+        <div className="notif-title-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
             <button
               onClick={() => navigate("/dashboard")}
@@ -423,6 +430,7 @@ export default function NotificationsPage() {
         </div>
 
         <div
+          className="notif-filter-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "1fr auto",
@@ -536,7 +544,7 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      <div style={{ padding: "24px 32px", maxWidth: "900px", margin: "0 auto" }}>
+      <div className="notif-content" style={{ padding: "24px 32px", maxWidth: "900px", margin: "0 auto" }}>
         {loading ? (
           <div
             style={{

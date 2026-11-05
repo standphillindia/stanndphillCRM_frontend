@@ -55,7 +55,18 @@ export interface ProjectResponse {
   currentStageCode: string | null;
   currentStageLate: boolean;
   currentStageDaysLateOrRemaining: number | null; // negative = days late
+
+  // Who the project is with.
+  opsPersonEmail?: string | null;
+  opsPersonName?: string | null;
+  engineerName?: string | null;
+  // "NEW" (added after the New/Old split went live) or "OLD".
+  batch?: ProjectBatch;
+  // When it was added to the CRM (ISO). startDate is the project's own Day 1.
+  createdAt?: string | null;
 }
+
+export type ProjectBatch = "NEW" | "OLD";
 
 // NOTE: CreateProjectRequest / createProject() were removed — POST
 // /projects no longer exists on the backend. Projects are now created
@@ -94,6 +105,8 @@ export interface FetchProjectsParams {
   deadlineTo?: string;
   sortBy?: string;
   sortDir?: "asc" | "desc";
+  // Projects page tab. Omit for all projects.
+  batch?: ProjectBatch;
 }
 
 export const fetchProjects = async (
@@ -106,10 +119,11 @@ export const fetchProjects = async (
 }> => {
   const {
     page = 0, size = 10, search, stage, engineerEmail,
-    teamName, deadlineFrom, deadlineTo, sortBy = "createdAt", sortDir = "desc",
+    teamName, deadlineFrom, deadlineTo, sortBy = "createdAt", sortDir = "desc", batch,
   } = params;
 
   const q: Record<string, string | number> = { page, size, sortBy, sortDir };
+  if (batch)                    q.batch         = batch;
   if (search?.trim())           q.search        = search.trim();
   if (stage && stage !== "ALL") q.stage         = stage;
   if (engineerEmail?.trim())    q.engineerEmail = engineerEmail.trim();
@@ -161,7 +175,122 @@ export const fetchProjectsForPayments = async (
   };
 };
 
+// ── Manual "Add Project" (projects already running before the CRM) ─────
+// POST /api/projects/import — Admin only. The project lands in the stage
+// tracker at `startGroup`: earlier groups are recorded as done, that group
+// becomes active, later ones stay pending.
+export type ImportScheduleMode = "FROM_TODAY" | "FROM_ORIGINAL_START";
+
+export interface ImportProjectRequest {
+  projectName?: string;
+  certificationType?: string;
+  companyName: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  gstNumber?: string;
+  customerPanNo?: string;
+  billingAddress?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  paymentTerms?: string;
+  notes?: string;
+  amount?: number;
+  deadline?: string;          // yyyy-MM-dd
+
+  engineerId?: string;
+  opsPersonId?: string;
+  ownerId?: string;
+  departmentId?: string;
+
+  startGroup: number;
+  scheduleMode: ImportScheduleMode;
+  originalStartDate?: string; // yyyy-MM-dd
+  auditDate?: string;         // yyyy-MM-dd
+}
+
+export const importProject = async (req: ImportProjectRequest): Promise<ProjectResponse> => {
+  const res = await api.post<ProjectResponse>("/projects/import", req);
+  return res.data;
+};
+
 export const getProjectById = async (id: string): Promise<ProjectResponse> => {
   const res = await api.get<ProjectResponse>(`/projects/${id}`);
+  return res.data;
+};
+// ── Assign Ops person / engineer ─────────────────────────────────────
+// Ops stages of the tracker go to the Ops person's My Tasks, Engineer
+// stages to the engineer's. Empty = leave as it is.
+export interface AssignProjectsRequest {
+  opsPersonEmail?: string;
+  engineerEmail?: string;
+}
+
+export const assignProject = async (
+  id: string,
+  req: AssignProjectsRequest
+): Promise<ProjectResponse> => {
+  const res = await api.patch<ProjectResponse>(`/projects/${id}/assign`, req);
+  return res.data;
+};
+
+export const assignProjectsBulk = async (
+  projectIds: string[],
+  req: AssignProjectsRequest
+): Promise<ProjectResponse[]> => {
+  const res = await api.patch<ProjectResponse[]>("/projects/assign-bulk", { projectIds, ...req });
+  return res.data;
+};
+
+// Admin: move projects between the New and Old tabs of the Projects page.
+export const moveProjectsToBatch = async (
+  projectIds: string[],
+  batch: ProjectBatch
+): Promise<ProjectResponse[]> => {
+  const res = await api.patch<ProjectResponse[]>("/projects/batch", { projectIds, batch });
+  return res.data;
+};
+
+// ── Project name & client details (Admin / Operations) ──────────────────
+// e.g. rename "BIS - Website Lead" to the real company once it's known.
+export interface ProjectDetails {
+  id: string;
+  projectName: string;
+  certificationType: string | null;
+  companyName: string | null;
+  contactName: string | null;
+  email: string | null;
+  phone: string | null;
+  gstNumber: string | null;
+  customerPanNo: string | null;
+  billingAddress: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+}
+
+export type UpdateProjectDetailsRequest = Partial<Omit<ProjectDetails, "id" | "certificationType">>;
+
+export const fetchProjectDetails = async (projectId: string): Promise<ProjectDetails> =>
+  (await api.get<ProjectDetails>(`/projects/${projectId}/details`)).data;
+
+export const updateProjectDetails = async (
+  projectId: string,
+  req: UpdateProjectDetailsRequest
+): Promise<ProjectDetails> =>
+  (await api.patch<ProjectDetails>(`/projects/${projectId}/details`, req)).data;
+/**
+ * Payments → Projects: set a project's contract (total agreed) amount by
+ * hand. Received / Pending are re-worked on the server straight after.
+ */
+export const setProjectContractAmount = async (
+  projectId: string,
+  amount: number
+): Promise<{ projectId: string; amount: number }> => {
+  const res = await api.patch<{ projectId: string; amount: number }>(
+    `/payments/projects/${projectId}/contract`,
+    { amount }
+  );
   return res.data;
 };

@@ -18,6 +18,10 @@ import {
 import AmcInvoiceFormModal from "../../../components/invoice/AmcInvoiceFormModal";
 import AmcInvoicePreviewModal from "../../../components/invoice/AmcInvoicePreviewModal";
 import AddPaymentTransactionModal from "../components/AddPaymentTransactionModal";
+import PaymentsReceivedModal from "../components/PaymentsReceivedModal";
+import { useToastNotification } from "../../../hooks/useToastNotification";
+import { getApiErrorMessage } from "../../../utils/apiError";
+import InvoiceRowCards from "../../../components/invoice/InvoiceRowCards";
 
 const STATUS_STYLES: Record<string, string> = {
   PENDING: "bg-orange-100 text-orange-800",
@@ -29,6 +33,7 @@ const STATUS_STYLES: Record<string, string> = {
 export default function AmcPaymentDetails() {
   const { amcId } = useParams<{ amcId: string }>();
   const navigate = useNavigate();
+  const toast = useToastNotification();
 
   const [amc, setAmc] = useState<AmcProject | null>(null);
   const [rows, setRows] = useState<AmcInvoicePaymentRow[]>([]);
@@ -39,6 +44,8 @@ export default function AmcPaymentDetails() {
   const [showTiForm, setShowTiForm] = useState(false);
   const [previewInvoice, setPreviewInvoice] = useState<InvoiceDetailsResponse | null>(null);
   const [recordPaymentFor, setRecordPaymentFor] = useState<AmcInvoicePaymentRow | null>(null);
+  // "Payments received" (date, reference no., edit) for this PI.
+  const [paymentsFor, setPaymentsFor] = useState<AmcInvoicePaymentRow | null>(null);
   const [generatingTi, setGeneratingTi] = useState<string | null>(null);
   const [linkingTiFor, setLinkingTiFor] = useState<AmcInvoicePaymentRow | null>(null);
   const [linkTargetPiId, setLinkTargetPiId] = useState<string>("");
@@ -59,7 +66,7 @@ export default function AmcPaymentDetails() {
       setAmc(amcDetails.amc);
       setRows(invoiceRows);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load AMC payment details");
+      setError(getApiErrorMessage(err, "Failed to load AMC payment details"));
     } finally {
       setLoading(false);
     }
@@ -74,7 +81,7 @@ export default function AmcPaymentDetails() {
       const details = await getInvoiceDetailsById(invoiceId);
       setPreviewInvoice(details);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to open invoice");
+      setError(getApiErrorMessage(err, "Failed to open invoice"));
     }
   };
 
@@ -83,10 +90,10 @@ export default function AmcPaymentDetails() {
     setError(null);
     try {
       await generateTiFromPi(piId);
-      alert("✅ TI generated from this PI!");
+      toast.success("Tax Invoice generated", "The TI has been created from this PI.");
       refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate TI");
+      setError(getApiErrorMessage(err, "Failed to generate TI"));
     } finally {
       setGeneratingTi(null);
     }
@@ -102,7 +109,7 @@ export default function AmcPaymentDetails() {
       setLinkTargetPiId("");
       refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to link TI to PI");
+      setError(getApiErrorMessage(err, "Failed to link TI to PI"));
     } finally {
       setLinkSubmitting(false);
     }
@@ -138,7 +145,7 @@ export default function AmcPaymentDetails() {
   if (!amc) return null;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-0 lg:p-6 space-y-4 lg:space-y-6">
       <div>
         <button onClick={() => navigate("/payments/amc")} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium mb-2">
           <ArrowLeft size={16} /> Back to AMC list
@@ -179,7 +186,20 @@ export default function AmcPaymentDetails() {
         {rows.length === 0 ? (
           <div className="p-8 text-center text-gray-500 text-sm">No PI/TI yet for this AMC.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Phone / tablet: one card per PI / TI. The table is for laptops. */}
+          <div className="lg:hidden">
+            <InvoiceRowCards
+              rows={rows}
+              generatingTi={generatingTi}
+              onPreview={openPreview}
+              onRecordPayment={(row) => setRecordPaymentFor(row)}
+              onGenerateTi={handleGenerateTi}
+              onLinkTi={(row) => { setLinkingTiFor(row); setLinkTargetPiId(""); }}
+              onViewPayments={(row) => setPaymentsFor(row)}
+            />
+          </div>
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -213,6 +233,12 @@ export default function AmcPaymentDetails() {
                     <td className="px-6 py-4 text-right text-gray-900">{formatCurrency(row.totalAmount)}</td>
                     <td className="px-6 py-4 text-right text-green-700">
                       {row.paidAmount != null ? formatCurrency(row.paidAmount) : "—"}
+                      {row.invoiceType === "PROFORMA" && row.paymentId && (row.paidAmount ?? 0) > 0 && (
+                        <button onClick={() => setPaymentsFor(row)}
+                          className="block ml-auto mt-0.5 text-xs font-medium text-blue-700 hover:text-blue-900 underline">
+                          View payments
+                        </button>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right text-orange-700">
                       {row.dueAmount != null ? formatCurrency(row.dueAmount) : "—"}
@@ -255,6 +281,7 @@ export default function AmcPaymentDetails() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
@@ -279,6 +306,16 @@ export default function AmcPaymentDetails() {
           invoice={previewInvoice}
           onClose={() => { setPreviewInvoice(null); refresh(); }}
           onUpdated={(updated) => setPreviewInvoice(updated)}
+        />
+      )}
+
+      {paymentsFor && paymentsFor.paymentId && (
+        <PaymentsReceivedModal
+          paymentId={paymentsFor.paymentId}
+          invoiceNumber={paymentsFor.invoiceNumber}
+          totalAmount={paymentsFor.totalAmount}
+          onClose={() => setPaymentsFor(null)}
+          onChanged={refresh}
         />
       )}
 

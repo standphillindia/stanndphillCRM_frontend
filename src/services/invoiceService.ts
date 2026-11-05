@@ -299,7 +299,44 @@ export interface InvoiceDetailsResponse {
   remarks?: string;
   signatoryName?: string;
   items: InvoiceItemResponse[];
+
+  // TDS — Tax Invoice only (NIL / 2 / 10 %), on the taxable value.
+  tdsRate?: number | null;
+  tdsAmount?: number | null;
+  amountAfterTds?: number | null;
+  // PI only: ADVANCE / SAMPLE_TESTING / FINAL (decides PI-1 / PI-ST / PI-F).
+  piStage?: PiStage | null;
+  // TI only: the PI it was made from — printed as "Proforma Invoice No. / Date".
+  sourcePiNumber?: string | null;
+  sourcePiDate?: string | null;
+  /** Billed without GST (government fee, engineer expenses …) — added after GST. */
+  nonTaxableAmount?: number | null;
+  /** What the non-taxable amount is for. Blank = "Government Fee". */
+  nonTaxableLabel?: string | null;
+  /** PI only: received so far, still due, and each payment — printed on the PI. */
+  receivedAmount?: number | null;
+  balanceAmount?: number | null;
+  payments?: InvoicePaymentLine[] | null;
 }
+
+/** One payment received against a PI (amount / date / mode). */
+export interface InvoicePaymentLine {
+  amount: number;
+  paidDate: string;
+  paymentMode?: string | null;
+}
+
+export type PiStage = "ADVANCE" | "SAMPLE_TESTING" | "FINAL";
+export const PI_STAGE_OPTIONS: { value: PiStage; label: string }[] = [
+  { value: "ADVANCE", label: "Advance (PI-1, PI-2 …)" },
+  { value: "SAMPLE_TESTING", label: "Sample Testing (PI-ST)" },
+  { value: "FINAL", label: "Final (PI-F)" },
+];
+export const TDS_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: "NIL" },
+  { value: 2, label: "2%" },
+  { value: 10, label: "10%" },
+];
 
 export interface AmcInvoiceSummaryResponse {
   amcId: string;
@@ -360,6 +397,12 @@ export const createAmcInvoice = async (
     // taxType is omitted. See constants/taxConstants.
     gstRate?: number;
     taxType?: TaxType;
+    // PI: which PI this is (number becomes PI-1 / PI-ST / PI-F …/FY/quote).
+    piStage?: PiStage;
+    // TI: TDS rate the client deducts — 0 (NIL), 2 or 10.
+    tdsRate?: number;
+    nonTaxableAmount?: number;   // billed without GST — added after GST
+    nonTaxableLabel?: string;    // what it is for, e.g. "Engineer Expenses"
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {
@@ -415,11 +458,16 @@ export const updateAmcInvoiceDetails = async (
     items?: InvoiceLineItemRequest[];
     invoiceNumber?: string;
     signatoryName?: string;
+    issueDate?: string;      // yyyy-MM-dd — editable invoice date
+    placeOfSupply?: string;  // client's state name (GST Place of Supply)
     // Optional GST overrides — the backend recalculates tax from the
     // line items regardless, and falls back to auto-detection when
     // taxType is omitted. See constants/taxConstants.
     gstRate?: number;
     taxType?: TaxType;
+    tdsRate?: number;        // TI only — 0 (NIL), 2 or 10
+    nonTaxableAmount?: number;   // billed without GST — added after GST
+    nonTaxableLabel?: string;    // what it is for, e.g. "Engineer Expenses"
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.patch<InvoiceDetailsResponse>(
@@ -544,6 +592,12 @@ export const createProjectInvoice = async (
     // taxType is omitted. See constants/taxConstants.
     gstRate?: number;
     taxType?: TaxType;
+    // PI: which PI this is (number becomes PI-1 / PI-ST / PI-F …/FY/quote).
+    piStage?: PiStage;
+    // TI: TDS rate the client deducts — 0 (NIL), 2 or 10.
+    tdsRate?: number;
+    nonTaxableAmount?: number;   // billed without GST — added after GST
+    nonTaxableLabel?: string;    // what it is for, e.g. "Engineer Expenses"
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {
@@ -611,9 +665,17 @@ export const createLeadInvoice = async (
     remarks?: string;
     items?: InvoiceLineItemRequest[];
     sourcePiId?: string;
+    /** Own PI/TI number; blank = next auto number. */
+    invoiceNumber?: string;
     // Optional GST overrides — see constants/taxConstants.
     gstRate?: number;
     taxType?: TaxType;
+    // PI: which PI this is (number becomes PI-1 / PI-ST / PI-F …/FY/quote).
+    piStage?: PiStage;
+    // TI: TDS rate the client deducts — 0 (NIL), 2 or 10.
+    tdsRate?: number;
+    nonTaxableAmount?: number;   // billed without GST — added after GST
+    nonTaxableLabel?: string;    // what it is for, e.g. "Engineer Expenses"
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>("/finance/invoices", {
@@ -672,10 +734,13 @@ export interface IndependentProjectDetailsResponse {
   createdAt: string;
 }
 
+// Every field is optional — the team often has only part of the client's
+// details and must raise the PI first. A blank projectName is filled from
+// the company name on the server; contractAmount 0 = not known yet.
 export interface CreateIndependentProjectRequest {
-  projectName: string;
+  projectName?: string;
   certificationType?: string;
-  clientName: string;
+  clientName?: string;
   clientEmail?: string;
   clientGst?: string;
   billingAddress?: string;
@@ -713,6 +778,31 @@ export const getIndependentProjects = async (): Promise<IndependentProjectRespon
   return response.data;
 };
 
+/**
+ * Correct an existing record — usually the carried-forward received amount,
+ * which is entered by hand and, if wrong, leaves the row showing more money
+ * received than the contract is worth.
+ */
+export const updateIndependentProject = async (
+  id: string,
+  req: CreateIndependentProjectRequest
+): Promise<IndependentProjectResponse> => {
+  const res = await api.put<IndependentProjectResponse>(
+    `/finance/independent-projects/${id}`,
+    req
+  );
+  return res.data;
+};
+
+/**
+ * Delete a record. The backend refuses while any invoice still hangs off
+ * it — those went to a client and may carry payments, so they have to be
+ * dealt with first.
+ */
+export const deleteIndependentProject = async (id: string): Promise<void> => {
+  await api.delete(`/finance/independent-projects/${id}`);
+};
+
 export const getIndependentProjectById = async (
   id: string
 ): Promise<IndependentProjectDetailsResponse> => {
@@ -748,6 +838,12 @@ export const createIndependentInvoice = async (
     signatoryName?: string;
     gstRate?: number;
     taxType?: TaxType;
+    // PI: which PI this is (number becomes PI-1 / PI-ST / PI-F …/FY/quote).
+    piStage?: PiStage;
+    // TI: TDS rate the client deducts — 0 (NIL), 2 or 10.
+    tdsRate?: number;
+    nonTaxableAmount?: number;   // billed without GST — added after GST
+    nonTaxableLabel?: string;    // what it is for, e.g. "Engineer Expenses"
   }
 ): Promise<InvoiceDetailsResponse> => {
   const response = await api.post<InvoiceDetailsResponse>(
@@ -775,5 +871,43 @@ export const getIndependentProjectInvoicesWithPayment = async (
   const response = await api.get<ProjectInvoicePaymentRow[]>(
     `/finance/invoices/independent-project/${independentProjectId}/with-payment`
   );
+  return response.data;
+};
+
+// ── Payments → Invoice Report ────────────────────────────────────────
+export interface InvoiceReportRow {
+  id: string;
+  invoiceNumber: string;
+  invoiceType: "PROFORMA" | "TAX";
+  status: string;
+  issueDate: string;
+  referenceType: string | null;
+  clientName: string | null;
+  clientGst: string | null;
+  placeOfSupply: string | null;
+  taxableAmount: number | null;
+  cgstAmount: number | null;
+  sgstAmount: number | null;
+  igstAmount: number | null;
+  totalAmount: number | null;
+  tdsRate: number | null;
+  tdsAmount: number | null;
+  amountAfterTds: number | null;
+  receivedAmount: number | null;
+  balanceAmount: number | null;
+  sourcePiNumber: string | null;
+  sourcePiDate: string | null;
+  piStage: PiStage | null;
+}
+
+/** PI/TI register between two invoice dates (yyyy-MM-dd). type: PROFORMA / TAX / ALL. */
+export const getInvoiceReport = async (
+  from: string,
+  to: string,
+  type: "ALL" | "PROFORMA" | "TAX" = "ALL"
+): Promise<InvoiceReportRow[]> => {
+  const response = await api.get<InvoiceReportRow[]>("/finance/invoices/report", {
+    params: { from, to, type },
+  });
   return response.data;
 };

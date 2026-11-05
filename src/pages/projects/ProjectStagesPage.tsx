@@ -6,7 +6,8 @@
 // side by side.
 
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { usePermissions } from "../../hooks/usePermissions";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   fetchProjectStages,
   completeStage,
@@ -16,9 +17,16 @@ import {
   failEngineerVisit,
   uploadVisitPhoto,
   parseEngineerVisitState,
+  needsLateRemark,
   type StageTrackerResponse,
 } from "../../services/projectStageService";
+import StageRemarksModal from "../../components/projects/StageRemarksModal";
+import VisitReportViewModal from "../../components/projects/VisitReportViewModal";
+import { getVisitReport, type VisitReport } from "../../services/visitReportService";
 import { useToast } from "../../context/ToastContext";
+import { useAuth } from "../../context/AuthContext";
+import { visitActionFor, visitButtonLabel, visitDateLabel, visitRoles } from "../../utils/visitPermissions";
+import VisitApprovalModal from "../../components/projects/VisitApprovalModal";
 
 function statusBadge(status: StageTrackerResponse["status"]) {
   switch (status) {
@@ -42,6 +50,9 @@ function groupByOrder(stages: StageTrackerResponse[]) {
 export default function ProjectStagesPage() {
   const { id } = useParams<{ id: string }>();
   const { addToast } = useToast();
+  // Group 8 visit: Ops schedules, Engineer logs the result (Admin both).
+  const { token } = useAuth();
+  const navigate = useNavigate();
   const showToast = (message: string, type: "success" | "error" = "success") =>
     addToast({ title: type === "error" ? "Error" : "Success", message, type });
 
@@ -63,8 +74,34 @@ export default function ProjectStagesPage() {
   const [engCompleteNotes, setEngCompleteNotes] = useState("");
   const [engUploading, setEngUploading] = useState(false);
 
+  // Admin: approve / change / cancel a requested factory visit.
+  const [approvalFor, setApprovalFor] = useState<StageTrackerResponse | null>(null);
+
   const [engFailModalOpen, setEngFailModalOpen] = useState(false);
   const [engFailReason, setEngFailReason] = useState("");
+
+  // Stage notes. late = opened from Mark Done on a late stage with no
+  // delay note yet; saving the note then carries on with Mark Done.
+  const [notesFor, setNotesFor] = useState<{ stage: StageTrackerResponse; late: boolean } | null>(null);
+
+  // Factory-visit document checklist + basic info (filled by the engineer
+  // after logging the visit). Documents marked "No" blink for Admin.
+  const [visitReport, setVisitReport] = useState<VisitReport | null>(null);
+  const [visitReportOpen, setVisitReportOpen] = useState(false);
+  const canEditVisitReport = visitRoles(token).isAdmin || visitRoles(token).isEngineer;
+  // Approve / change / cancel a factory visit, and schedule without approval:
+  // Admin, or "Factory visit approvals" with Edit in Roles & Permissions.
+  const perms = usePermissions();
+  const canApproveVisits = visitRoles(token).isAdmin || perms.can("VISIT_APPROVALS", "EDIT");
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    getVisitReport(id)
+      .then((r) => { if (!cancelled) setVisitReport(r); })
+      .catch(() => { /* not critical — the stage page still works without it */ });
+    return () => { cancelled = true; };
+  }, [id]);
 
   const load = async () => {
     if (!id) return;
@@ -87,15 +124,26 @@ export default function ProjectStagesPage() {
   const handleComplete = async (stage: StageTrackerResponse) => {
     if (!id) return;
 
+    // A late stage must say why before it is done. Scheduling a factory
+    // visit is not "done", so only the visit result needs the reason.
+    const finishes = stage.stageCode !== "CLIENT_VISIT_ENG"
+      || visitActionFor(token, stage.validationData) === "log-result";
+    if (finishes && needsLateRemark(stage)) {
+      setNotesFor({ stage, late: true });
+      return;
+    }
+
     if (stage.stageCode === "AUDIT_SCHEDULE") {
       setAuditModalOpen(true);
       return;
     }
     if (stage.stageCode === "CLIENT_VISIT_ENG") {
-      const visitState = parseEngineerVisitState(stage.validationData);
-      if (visitState.visitStatus === "SCHEDULED") {
+      const action = visitActionFor(token, stage.validationData);
+      if (action === "log-result") {
         setEngCompleteModalOpen(true);
-      } else {
+      } else if (action === "approve") {
+        setApprovalFor(stage);
+      } else if (action === "schedule" || action === "reschedule" || action === "change-request") {
         setEngScheduleModalOpen(true);
       }
       return;
@@ -155,7 +203,11 @@ export default function ProjectStagesPage() {
       setEngScheduleModalOpen(false);
       setEngVisitDate("");
       await load();
-      showToast("Visit scheduled — due date updated.");
+      showToast(
+        canApproveVisits
+          ? "Visit scheduled — due date updated."
+          : "Visit date sent to Admin for approval. You'll be notified once it's approved."
+      );
     } catch (err: any) {
       showToast(err?.response?.data?.message ?? "Could not schedule the visit.", "error");
     } finally {
@@ -176,8 +228,14 @@ export default function ProjectStagesPage() {
       setEngCompleteModalOpen(false);
       setEngPhotoFile(null);
       setEngCompleteNotes("");
-      await load();
       showToast("Visit completed — sample marked sent to lab.");
+      // The engineer fills the document checklist + basic info next, then
+      // the visit expense (3-day window).
+      if (!visitRoles(token).isAdmin) {
+        navigate(`/visit-report/${id}`);
+        return;
+      }
+      await load();
     } catch (err: any) {
       showToast(err?.response?.data?.message ?? "Could not complete the visit.", "error");
     } finally {
@@ -207,13 +265,31 @@ export default function ProjectStagesPage() {
   const grouped = groupByOrder(stages);
   const projectName = stages[0]?.projectName ?? "Project";
 
+  // Summary for the top of the page (handy on a phone).
+  const stageCounts = {
+    done: stages.filter((x) => x.status === "DONE").length,
+    late: stages.filter((x) => x.status === "LATE").length,
+    now: stages.filter((x) => x.status === "IN_PROGRESS").length,
+  };
+  const stagesLeft = stages.length - stageCounts.done - stageCounts.late - stageCounts.now;
+
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
+    <div className="p-0 lg:p-6">
+      <div className="mb-4 lg:mb-6 flex items-center justify-between">
+        <div className="min-w-0">
           <Link to="/projects" className="text-sm text-blue-600 hover:underline">← Back to Projects</Link>
-          <h1 className="text-3xl font-bold mt-1">{projectName}</h1>
+          <h1 className="text-xl lg:text-3xl font-bold mt-1 break-words">{projectName}</h1>
           <p className="text-gray-500">45-Day Stage Timeline</p>
+          {stages.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5 text-xs font-semibold">
+              <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800">Done {stageCounts.done}</span>
+              {stageCounts.late > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700">Late {stageCounts.late}</span>
+              )}
+              <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">In progress {stageCounts.now}</span>
+              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Left {stagesLeft}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -225,15 +301,21 @@ export default function ProjectStagesPage() {
 
       <div className="space-y-4">
         {grouped.map(([groupOrder, rows]) => (
-          <div key={groupOrder} className="rounded-lg border bg-white p-4">
+          <div key={groupOrder} className="rounded-lg border bg-white p-3 sm:p-4">
             <div className="text-xs font-semibold text-gray-400 uppercase mb-3">
               Group {groupOrder}
+              {(() => {
+                const n = rows.reduce((sum, r) => sum + (r.remarkCount ?? 0), 0);
+                return n > 0 ? <span className="ml-2 normal-case font-normal text-amber-700">· {n} note{n > 1 ? "s" : ""}</span> : null;
+              })()}
             </div>
             <div className={`grid gap-3 ${rows.length > 1 ? "md:grid-cols-2" : ""}`}>
               {rows.map((s) => (
                 <div
                   key={s.id}
-                  className={`rounded-lg border p-4 ${s.status === "LATE" ? "border-red-300 bg-red-50" : "border-gray-200"}`}
+                  className={`rounded-lg border p-3 sm:p-4 ${
+                    s.status === "LATE" ? "border-red-300 bg-red-50" : s.status === "DONE" ? "border-gray-200 opacity-80" : "border-gray-200"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -256,6 +338,27 @@ export default function ProjectStagesPage() {
                     </span>
                   </div>
 
+                  {/* Stage notes — why it's stuck / what's pending. */}
+                  <div className="mt-2 flex flex-col sm:flex-row items-stretch sm:items-start gap-2">
+                    {s.latestRemark ? (
+                      <p className="flex-1 min-w-0 text-xs text-gray-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                        <span className="line-clamp-2 whitespace-pre-line">📝 {s.latestRemark}</span>
+                        <span className="block text-[10px] text-gray-500 mt-0.5">
+                          {s.latestRemarkBy ?? ""}
+                          {s.latestRemarkAt ? ` · ${new Date(s.latestRemarkAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}` : ""}
+                        </span>
+                      </p>
+                    ) : (
+                      <span className="hidden sm:block flex-1" />
+                    )}
+                    <button
+                      onClick={() => setNotesFor({ stage: s, late: false })}
+                      className="shrink-0 px-3 py-2 sm:px-2 sm:py-1 rounded-lg sm:rounded text-sm sm:text-xs font-medium text-blue-700 border border-blue-200 bg-white hover:bg-blue-50"
+                    >
+                      {s.remarkCount ? `Notes (${s.remarkCount})` : "+ Add note"}
+                    </button>
+                  </div>
+
                   {s.accessLocked && (
                     <div className="mt-2 text-xs text-red-700 bg-red-100 rounded px-2 py-1">
                       🔒 Access locked — ask Admin to reauthorize before you can complete this.
@@ -269,11 +372,106 @@ export default function ProjectStagesPage() {
                     </div>
                   )}
 
-                  {s.status === "IN_PROGRESS" && !s.accessLocked && (
+                  {/* Factory-visit document checklist summary. */}
+                  {s.stageCode === "CLIENT_VISIT_ENG" && visitReport && (visitReport.checklistSubmittedAt || s.status === "DONE") && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                      {visitReport.checklistSubmittedAt ? (
+                        <>
+                          <span className="text-gray-600">📋 Documents:</span>
+                          <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-800">Yes {visitReport.checklistYes}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded ${
+                              visitReport.checklistNo ? "bg-red-600 text-white font-semibold animate-pulse" : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            No {visitReport.checklistNo}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">N.A. {visitReport.checklistNa}</span>
+                          {!visitReport.basicInfoSubmittedAt && <span className="text-amber-700">· Basic info pending</span>}
+                        </>
+                      ) : (
+                        <span className="text-amber-700">📋 Document checklist not filled yet</span>
+                      )}
+                      {canEditVisitReport && (!visitReport.checklistSubmittedAt || !visitReport.basicInfoSubmittedAt) ? (
+                        <Link
+                          to={`/visit-report/${s.projectId}`}
+                          className="ml-auto px-2 py-1 rounded font-medium text-white bg-amber-600 hover:bg-amber-700"
+                        >
+                          {visitReport.basicInfoSubmittedAt ? "Fill checklist" : "Fill basic info"}
+                        </Link>
+                      ) : null}
+                      <button
+                        onClick={() => setVisitReportOpen(true)}
+                        className={`${canEditVisitReport && (!visitReport.checklistSubmittedAt || !visitReport.basicInfoSubmittedAt) ? "" : "ml-auto "}px-2 py-1 rounded font-medium text-blue-700 border border-blue-200 hover:bg-blue-50`}
+                      >
+                        View checklist
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Group 8 factory visit — its own buttons (Ops schedules,
+                      Engineer logs the result). */}
+                  {s.stageCode === "CLIENT_VISIT_ENG" && (s.status === "IN_PROGRESS" || s.status === "LATE") && !s.accessLocked && (() => {
+                    const action = visitActionFor(token, s.validationData);
+                    const visit = parseEngineerVisitState(s.validationData);
+                    return (
+                      <div className="mt-3 flex flex-col gap-1.5">
+                        {visit.visitStatus === "PENDING_APPROVAL" && (
+                          <span className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 w-fit">
+                            ⏳ Visit requested for {visitDateLabel(visit.requestedDate ?? visit.visitDate)}
+                            {visit.requestedBy ? ` by ${visit.requestedBy}` : ""} — waiting for Admin approval
+                          </span>
+                        )}
+                        {visit.visitStatus === "SCHEDULED" && visit.visitDate && (
+                          <span className="text-xs text-blue-700">
+                            📅 Visit scheduled for {visitDateLabel(visit.visitDate)}
+                            {visit.approvedBy ? ` · approved by ${visit.approvedBy}` : ""}
+                            {action === "reschedule" ? " — Engineer will log the result" : ""}
+                          </span>
+                        )}
+                        {visit.visitStatus === "FAILED" && (
+                          <span className="text-xs text-red-700">Last visit failed — pick a new date</span>
+                        )}
+                        {visit.visitStatus === "CANCELLED" && (
+                          <span className="text-xs text-red-700">
+                            Visit cancelled{visit.cancelledBy ? ` by ${visit.cancelledBy}` : ""}
+                            {visit.notes ? `: ${visit.notes}` : ""} — request a new date
+                          </span>
+                        )}
+                        {action === "none" ? (
+                          <span className="text-xs text-gray-500">Operations schedules this visit; the Engineer logs the result.</span>
+                        ) : (
+                          <button
+                            disabled={busyStage === s.stageCode}
+                            onClick={() => handleComplete(s)}
+                            className={`w-full sm:w-fit px-3 py-3 sm:py-1.5 rounded-xl sm:rounded-lg text-sm sm:text-xs font-semibold sm:font-medium text-white disabled:opacity-50 ${
+                              action === "reschedule"
+                                ? "bg-blue-600 hover:bg-blue-700"
+                                : s.status === "LATE"
+                                ? "bg-red-600 hover:bg-red-700"
+                                : "bg-green-600 hover:bg-green-700"
+                            }`}
+                          >
+                            {busyStage === s.stageCode ? "Saving…" : visitButtonLabel(action)}
+                          </button>
+                        )}
+                        {canApproveVisits && visit.visitStatus === "SCHEDULED" && (
+                          <button
+                            onClick={() => setApprovalFor(s)}
+                            className="w-fit text-xs font-medium text-blue-700 hover:underline"
+                          >
+                            Change date / engineer or cancel
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {s.stageCode !== "CLIENT_VISIT_ENG" && s.status === "IN_PROGRESS" && !s.accessLocked && (
                     <button
                       disabled={busyStage === s.stageCode}
                       onClick={() => handleComplete(s)}
-                      className="mt-3 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                      className="mt-3 w-full sm:w-fit px-3 py-3 sm:py-1.5 rounded-xl sm:rounded-lg text-sm sm:text-xs font-semibold sm:font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
                     >
                       {busyStage === s.stageCode
                         ? "Saving…"
@@ -287,11 +485,11 @@ export default function ProjectStagesPage() {
                     </button>
                   )}
 
-                  {s.status === "LATE" && !s.accessLocked && (
+                  {s.stageCode !== "CLIENT_VISIT_ENG" && s.status === "LATE" && !s.accessLocked && (
                     <button
                       disabled={busyStage === s.stageCode}
                       onClick={() => handleComplete(s)}
-                      className="mt-3 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                      className="mt-3 w-full sm:w-fit px-3 py-3 sm:py-1.5 rounded-xl sm:rounded-lg text-sm sm:text-xs font-semibold sm:font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
                     >
                       {busyStage === s.stageCode ? "Saving…" : "Mark Done (Late)"}
                     </button>
@@ -303,8 +501,45 @@ export default function ProjectStagesPage() {
         ))}
       </div>
 
+      {visitReportOpen && visitReport && (
+        <VisitReportViewModal
+          report={visitReport}
+          canEdit={canEditVisitReport}
+          onClose={() => setVisitReportOpen(false)}
+        />
+      )}
+
+      {approvalFor && (
+        <VisitApprovalModal
+          stage={approvalFor}
+          onClose={() => setApprovalFor(null)}
+          onDone={(message) => {
+            setApprovalFor(null);
+            showToast(message);
+            load();
+          }}
+        />
+      )}
+
+      {notesFor && (
+        <StageRemarksModal
+          stage={notesFor.stage}
+          requireLateReason={notesFor.late}
+          onClose={() => { setNotesFor(null); load(); }}
+          onSaved={() => {
+            if (notesFor.late) {
+              const stage = { ...notesFor.stage, lateRemarkGiven: true };
+              setNotesFor(null);
+              handleComplete(stage);
+            } else {
+              load();
+            }
+          }}
+        />
+      )}
+
       {auditModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-sm">
             <h2 className="text-lg font-semibold mb-4">Schedule Audit</h2>
             <label className="block text-sm text-gray-600 mb-1">Visit Date</label>
@@ -342,9 +577,11 @@ export default function ProjectStagesPage() {
       )}
 
       {engScheduleModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-sm">
-            <h2 className="text-lg font-semibold mb-1">Schedule Factory Visit</h2>
+            <h2 className="text-lg font-semibold mb-1">
+              {canApproveVisits ? "Schedule Factory Visit" : "Request Factory Visit Date"}
+            </h2>
             <label className="block text-sm text-gray-600 mb-1 mt-3">Visit Date</label>
             <input
               type="date"
@@ -353,8 +590,9 @@ export default function ProjectStagesPage() {
               className="w-full border rounded-lg px-3 py-2 mb-4"
             />
             <p className="text-xs text-gray-500 mb-4">
-              This becomes the due date. Once visited, come back to log the result (photo required) or mark
-              it failed to reschedule.
+              {canApproveVisits
+                ? "This becomes the due date. Once visited, come back to log the result (photo required) or mark it failed to reschedule."
+                : "This date goes to Admin for approval. Admin may approve it, change the date or engineer, or cancel it. Travel is booked only on the approved date."}
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -368,7 +606,7 @@ export default function ProjectStagesPage() {
                 onClick={handleEngScheduleSubmit}
                 className="px-3 py-1.5 rounded-lg text-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
               >
-                {busyStage === "CLIENT_VISIT_ENG" ? "Saving…" : "Schedule"}
+                {busyStage === "CLIENT_VISIT_ENG" ? "Saving…" : canApproveVisits ? "Schedule" : "Send for approval"}
               </button>
             </div>
           </div>
@@ -376,7 +614,7 @@ export default function ProjectStagesPage() {
       )}
 
       {engCompleteModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-sm">
             <h2 className="text-lg font-semibold mb-1">Log Visit Result</h2>
 
@@ -432,7 +670,7 @@ export default function ProjectStagesPage() {
       )}
 
       {engFailModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-sm">
             <h2 className="text-lg font-semibold mb-1">Mark Visit Failed</h2>
             <label className="block text-sm text-gray-600 mb-1 mt-3">Reason (optional)</label>

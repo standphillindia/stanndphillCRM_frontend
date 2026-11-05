@@ -125,7 +125,7 @@ export default function AmcDetailsPage() {
   };
 
   return (
-    <div className="p-2 sm:p-6 bg-gray-50 min-h-screen">
+    <div className="p-0 lg:p-6 bg-gray-50 min-h-screen">
       {/* Header */}
       <div className="mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
@@ -138,7 +138,7 @@ export default function AmcDetailsPage() {
           <h1 className="text-2xl sm:text-3xl break-words font-bold text-gray-900">AMC Details</h1>
           <p className="text-gray-600 mt-1">AMC Code: <span className="font-semibold">{amc.amcCode}</span></p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={handleRefresh}
             className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 font-medium"
@@ -209,7 +209,7 @@ export default function AmcDetailsPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="p-6">
+        <div className="p-3 sm:p-6">
           {activeTab === 'overview' && (
             <OverviewTab details={details} />
           )}

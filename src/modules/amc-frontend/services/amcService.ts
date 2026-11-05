@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { normalizeError } from '../../../api/axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
 
@@ -17,6 +18,15 @@ axiosInstance.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// Same plain-English error messages as the rest of the CRM (api/axios.ts):
+// says whether the problem is the user's input, their access, the internet,
+// or the CRM itself — instead of Axios's raw "Request failed with status
+// code 500".
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => Promise.reject(normalizeError(error))
+);
 
 // Types
 export interface AmcProject {

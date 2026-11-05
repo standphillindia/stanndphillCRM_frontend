@@ -11,9 +11,17 @@ import {
   NOTIFICATION_TYPE_LABELS,
   NOTIFICATION_TYPE_COLORS,
   NOTIFICATION_TYPE_ICONS,
+  getNotificationLink,
   type NotificationResponse,
 } from "../../services/notificationservice";
 import { useToastNotification } from "../../hooks/useToastNotification";
+import {
+  isSoundOn,
+  setSoundOn,
+  playNotificationSound,
+  requestDesktopPermission,
+  showDesktopNotification,
+} from "../../utils/notificationAlert";
 
 interface NotificationBellProps {
   userEmail: string;
@@ -46,6 +54,7 @@ export default function NotificationBell({ userEmail }: NotificationBellProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
   const [loading, setLoading] = useState(false);
+  const [soundOn, setSoundOnState] = useState<boolean>(() => isSoundOn());
 
   // "Already dikha diya" notifications ki list — re-render pe reset nahi hoti
   const seenIds = useRef<Set<string>>(new Set());
@@ -71,18 +80,31 @@ export default function NotificationBell({ userEmail }: NotificationBellProps) {
       // Jo IDs pehle nahi dekhi thi — wahi asli "naye" notifications hain
       const freshOnes = list.filter((n) => !seenIds.current.has(n.id));
 
-      freshOnes.forEach((n) => {
+      // One sound per batch, not one per notification — five arriving
+      // together should still sound like one message.
+      if (freshOnes.length > 0) playNotificationSound();
+
+      freshOnes.forEach((n, i) => {
         seenIds.current.add(n.id);
         const variant = TOAST_VARIANT[n.type] ?? "info";
         const title =
           NOTIFICATION_TYPE_LABELS[n.type as keyof typeof NOTIFICATION_TYPE_LABELS] ??
           "Notification";
         toast[variant](title, n.message);
+
+        // Desktop pop-up while the CRM tab is in the background
+        // (max 3 per batch so a burst doesn't cover the screen).
+        if (i < 3) {
+          showDesktopNotification(title, n.message ?? "", n.id, () => {
+            const link = getNotificationLink(n.type, n.referenceType, n.referenceId);
+            navigate(link ?? "/notifications");
+          });
+        }
       });
     } catch (err) {
       console.error("Error polling notifications:", err);
     }
-  }, [userEmail, toast]);
+  }, [userEmail, toast, navigate]);
 
   // Load notifications when dropdown opens — uses the SAME per-user
   // endpoint as pollNotifications() above. Previously this called
@@ -107,10 +129,10 @@ export default function NotificationBell({ userEmail }: NotificationBellProps) {
     }
   }, [userEmail]);
 
-  // Poll on mount
+  // Poll on mount — every 20s so the sound arrives close to the event.
   useEffect(() => {
     pollNotifications();
-    const interval = setInterval(pollNotifications, 60000);
+    const interval = setInterval(pollNotifications, 20000);
     return () => clearInterval(interval);
   }, [pollNotifications]);
 
@@ -248,9 +270,59 @@ export default function NotificationBell({ userEmail }: NotificationBellProps) {
         }
       `}</style>
 
+      {/* Sound on/off — remembered per browser */}
+      <button
+        type="button"
+        onClick={() => {
+          const next = !soundOn;
+          setSoundOn(next);
+          setSoundOnState(next);
+          if (next) {
+            playNotificationSound(true); // let them hear what they turned on
+            requestDesktopPermission();
+          }
+        }}
+        title={soundOn ? "Notification sound on — click to mute" : "Notification sound off — click to turn on"}
+        aria-label={soundOn ? "Mute notification sound" : "Turn on notification sound"}
+        style={{
+          position: "absolute",
+          right: "100%",
+          top: "50%",
+          transform: "translateY(-50%)",
+          marginRight: "2px",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: "6px",
+          color: soundOn ? "#6b7280" : "#d1d5db",
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M11 5 6 9H2v6h4l5 4V5z" />
+          {soundOn ? (
+            <>
+              <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+              <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+            </>
+          ) : (
+            <>
+              <path d="m23 9-6 6" />
+              <path d="m17 9 6 6" />
+            </>
+          )}
+        </svg>
+      </button>
+
       {/* Bell Icon Button - ANIMATED */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          // A click is the moment browsers allow the pop-up permission ask.
+          requestDesktopPermission();
+          setIsOpen(!isOpen);
+        }}
         style={{
           background: "none",
           border: "none",

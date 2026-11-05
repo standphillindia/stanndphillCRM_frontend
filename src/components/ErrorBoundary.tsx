@@ -19,13 +19,22 @@ interface Props {
 
 interface State {
   hasError: boolean;
+  // One line about what broke, shown small so a screenshot sent to the
+  // tech team says where to look. No stack trace, no data.
+  detail?: string;
+  at?: string;
 }
 
 export default class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false };
 
-  static getDerivedStateFromError(): State {
-    return { hasError: true };
+  static getDerivedStateFromError(error: unknown): State {
+    const detail =
+      error instanceof Error ? `${error.name}: ${error.message}`.slice(0, 200) : String(error).slice(0, 200);
+    const at = new Date().toLocaleString("en-GB", {
+      timeZone: "Asia/Kolkata", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+    });
+    return { hasError: true, detail, at };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -47,9 +56,15 @@ export default class ErrorBoundary extends Component<Props, State> {
             </div>
             <h1 className="text-lg font-semibold text-slate-900">Something went wrong</h1>
             <p className="text-sm text-slate-500 mt-2">
-              This page ran into a problem. Your data is safe — try going back to the dashboard,
-              and contact support if this keeps happening.
+              This page ran into a problem in the CRM — this is not something you did, and your
+              data is safe. Go back to the dashboard and try again. If it happens again, send a
+              screenshot of this message to the tech team and tell them which page you were on.
             </p>
+            {this.state.detail && (
+              <p className="mt-4 text-[11px] text-slate-400 break-words font-mono">
+                {window.location.pathname} · {this.state.at} · {this.state.detail}
+              </p>
+            )}
             <button
               onClick={this.handleReload}
               className="mt-6 w-full h-11 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors"

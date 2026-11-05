@@ -18,6 +18,11 @@ export interface PaymentTransactionResponse {
   paidBy: string;
   paymentMode: string;
   referenceNo: string;
+  // Nov 2026 — who entered / last corrected it (empty on older entries)
+  recordedByName?: string | null;
+  recordedAt?: string | null;
+  editedByName?: string | null;
+  editedAt?: string | null;
 }
 
 export interface PaymentDashboardResponse {

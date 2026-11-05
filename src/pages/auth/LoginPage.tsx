@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { loginUser } from "../../services/authService";
 import { useAuth } from "../../context/AuthContext";
-import logo from "../../assets/brandlogo.png.png";   // ✅
+import logo from "../../assets/brandlogo.png.png";   
 
 
 export default function LoginPage() {
@@ -17,6 +17,9 @@ export default function LoginPage() {
   const [showPw, setShowPw]     = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
+  // Sent here because the 9-hour login ran out (api/axios.ts).
+  const [searchParams] = useSearchParams();
+  const sessionExpired = searchParams.get("expired") === "1";
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -34,21 +37,21 @@ export default function LoginPage() {
       };
 
       if (!ax.response) {
-        // No response object means the browser blocked/couldn't complete
-        // the request itself — CORS preflight rejection, backend down/
-        // unreachable, wrong VITE_API_BASE_URL, or DNS/timeout. This is
-        // NOT a wrong-password case, so don't say "Invalid email or password".
-        setError(
-          "Server Issue, Contact your administrator. "
-        );
+        // No response object means the browser couldn't complete the
+        // request — backend down or restarting, CORS block, wrong
+        // VITE_API_BASE_URL, or DNS/timeout. NOT a wrong-password case.
+        // ax.message is already the plain "can't reach the server" text
+        // from api/axios.ts.
+        setError(ax.message ?? "Can't reach the CRM server. Please check your internet and try again.");
       } else if (ax.response.status === 401) {
-        setError("Email ya password galat hai.");
+        setError(ax.response?.data?.message || "Incorrect email or password.");
       } else if (ax.response.status === 403) {
-        setError("Aapko is system tak access nahi hai. Administrator se sampark karein.");
+        setError("Your account doesn't have access to the CRM. Please contact your admin.");
       } else {
-        setError(
-          ax.response?.data?.message ?? ax.message ?? "Kuch galat ho gaya. Dubara try karein."
-        );
+        // Wrong password / account locked come with the backend's own
+        // message; a server fault comes with an error code for the tech
+        // team (both already worded by api/axios.ts).
+        setError(ax.message ?? "Something went wrong. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -85,6 +88,15 @@ export default function LoginPage() {
               Enter your credentials to access the dashboard.
             </p>
           </div>
+
+          {/* Session ran out */}
+          {sessionExpired && !error && (
+            <div className="mb-5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+              <p className="text-sm text-amber-800 leading-snug">
+               Sesson Out - Please login again
+              </p>
+            </div>
+          )}
 
           {/* Error banner */}
           {error && (

@@ -84,8 +84,9 @@ export default function AddPaymentTransactionModal({
   const today = new Date().toISOString().split("T")[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4">
+      {/* A bottom sheet on a phone, a dialog on a laptop. */}
+      <div className="bg-white rounded-t-2xl sm:rounded-lg shadow-lg w-full max-w-md max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
         <div className="border-b border-slate-200 px-6 py-4 flex items-start justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900">
@@ -123,6 +124,7 @@ export default function AddPaymentTransactionModal({
               </span>
               <input
                 type="number"
+                inputMode="decimal"
                 step="0.01"
                 min="0"
                 value={amount}

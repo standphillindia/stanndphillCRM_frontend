@@ -299,6 +299,12 @@ export const getNotificationLink = (
 ): string | null => {
   if (!referenceId) return null;
 
+  // Engineer visit expenses (add / approved / rejected / reminders).
+  if (referenceType?.toUpperCase() === "VISIT_EXPENSE") return `/visit-expenses`;
+
+  // 6:30 PM reminder — today's DTR not submitted yet.
+  if (type === "DTR_REMINDER") return `/dtr`;
+
   switch (type) {
     // A new/general lead event — go to the leads list, not a payment page.
     case "NEW_LEAD":

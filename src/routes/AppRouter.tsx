@@ -7,21 +7,30 @@ import ProtectedRoute from "../components/ProtectedRoute";
 import AdminRoute from "../components/AdminRoute";
 import MainLayout from "../layouts/main-layouts";
 
+import QuotationsPage from "../pages/quotations/QuotationsPage";
+
 import IndependentProjectsList from "../modules/payment/pages/IndependentProjectsList";
 import IndependentProjectDetails from "../modules/payment/pages/IndependentProjectDetails";
 
 // Page imports
 import LoginPage from "../pages/auth/LoginPage";
 import DashboardPage from "../pages/dashboard/DashboardPage";
+import ReportsPage from "../pages/reports/ReportsPage";
 import LeadsPage from "../pages/leads/LeadsPage";
 import AMCLeadsPage from "../pages/leads/AMCLeadsPage";
 import TasksPage from "../pages/tasks/TasksPage";
 import ProjectsPage from "../pages/projects/ProjectsPage";
 import ProjectStagesPage from "../pages/projects/ProjectStagesPage";
+import CompletedProjectsPage from "../pages/projects/CompletedProjectsPage";
 import MyTasksPage from "../pages/tasks/MyTasksPage";
+import MyDtrPage from "../pages/dtr/MyDtrPage";
+import TeamDtrPage from "../pages/dtr/TeamDtrPage";
+import VisitExpensesPage from "../pages/expenses/VisitExpensesPage";
+import VisitReportPage from "../pages/visit/VisitReportPage";
 import PaymentsPage from "../pages/payments/PaymentsPage";
 import LeadPaymentDetails from "../modules/payment/pages/LeadPaymentDetails";
 import LeadPaymentsList from "../modules/payment/pages/LeadPaymentsList";
+import InvoiceReport from "../modules/payment/pages/InvoiceReport";
 import DocumentsPage from "../pages/documents/DocumentsPage";
 import CertificationsPage from "../pages/certifications/CertificationsPage";
 import UsersPage from "../pages/users/UsersPage";
@@ -53,14 +62,30 @@ export default function AppRouter() {
         >
           <Route path="/dashboard" element={<DashboardPage />} />
 
+          {/* All seven reports, on a page of their own. Inside the same
+              protected layout as everything else, so the sidebar stays
+              put and nothing opens in a new tab. */}
+          <Route path="/reports" element={<ReportsPage />} />
+
           {/* ── Leads Module with nested AMC Leads route ────────────────── */}
           <Route path="/leads" element={<LeadsPage />} />
           <Route path="/leads/amc-leads" element={<AMCLeadsPage />} />
 
+          {/* Quotations. Sits at the top level rather than under /payments
+              because a quotation is raised before any payment exists —
+              often before the lead is even won. */}
+          <Route path="/quotations" element={<QuotationsPage />} />
+
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:id/stages" element={<ProjectStagesPage />} />
+          <Route path="/completed-projects" element={<CompletedProjectsPage />} />
           <Route path="/my-tasks" element={<MyTasksPage />} />
+          {/* DTR — Daily Task Report (own) and Team DTR (Admin / HR) */}
+          <Route path="/dtr" element={<MyDtrPage />} />
+          <Route path="/dtr/team" element={<TeamDtrPage />} />
+          <Route path="/visit-expenses" element={<VisitExpensesPage />} />
+          <Route path="/visit-report/:projectId" element={<VisitReportPage />} />
 
           {/* ── Payment Module with Nested Routes ────────────────── */}
           <Route path="/payments" element={<PaymentsPage />}>
@@ -79,6 +104,7 @@ export default function AppRouter() {
                 link, so the catch-all rule below sent it to /login. */}
             <Route path="independent" element={<IndependentProjectsList />} />
             <Route path="independent/:independentProjectId" element={<IndependentProjectDetails />} />
+            <Route path="invoice-report" element={<InvoiceReport />} />
           </Route>
 
           <Route path="/documents" element={<DocumentsPage />} />

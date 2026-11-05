@@ -88,8 +88,8 @@ export default function RolePermissionsPanel() {
       setDirty(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch {
-      setError("Save failed. Please try again.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -161,13 +161,21 @@ export default function RolePermissionsPanel() {
             <tbody className="divide-y divide-outline-variant/10">
               {PERMISSION_MODULES.map((mod) => {
                 const flags = rolePerms[mod.key];
+                const pageOnly = "pageOnly" in mod && mod.pageOnly;
+                const hint = "hint" in mod ? mod.hint : undefined;
                 return (
                   <tr key={mod.key} className="hover:bg-primary/[0.02] transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <span className="material-symbols-outlined text-[18px] text-outline">{mod.icon}</span>
                         <span className="text-body-md font-medium text-on-surface">{mod.label}</span>
+                        {pageOnly && (
+                          <span className="text-[10px] text-outline" title="Read also decides whether the page shows in the sidebar">
+                            (page)
+                          </span>
+                        )}
                       </div>
+                      {hint && <p className="text-[11px] text-outline mt-0.5 ml-[26px] leading-snug">{hint}</p>}
                     </td>
                     {PERMISSION_ACTIONS.map((a) => (
                       <td key={a.key} className="px-4 py-4 text-center">

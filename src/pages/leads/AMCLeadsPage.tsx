@@ -19,6 +19,8 @@ import {
   type AMCLeadStatus,
 } from "../../constants/amcLeadConstants";
 import { fetchUsers, type UserResponse as OrgUserResponse } from "../../services/userService";
+import { fetchAmcLeadQuotationCounts } from "../../services/quotationService";
+import QuotationLookupModal from "../../components/quotation/QuotationLookupModal";
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; border: string; label: string }> = {
   NEW: { bg: "bg-primary/10", text: "text-primary", border: "border-primary/20", label: "New" },
@@ -72,7 +74,7 @@ const inputCls = "w-full px-3 py-2.5 bg-surface border border-outline-variant/30
 function SkeletonRow() {
   return (
     <tr>
-      {[...Array(9)].map((_, i) => (
+      {[...Array(10)].map((_, i) => (
         <td key={i} className="px-6 py-4">
           <div className="h-4 bg-secondary-fixed/60 rounded animate-pulse" style={{ width: `${60 + (i % 3) * 20}%` }} />
         </td>
@@ -141,6 +143,10 @@ export default function AMCLeadsPage() {
   const [followUpDateInput, setFollowUpDateInput] = useState("");
   const [followUpError, setFollowUpError] = useState<string | null>(null);
   const [followUpLoading, setFollowUpLoading] = useState(false);
+
+  // ── Quotation column: AMC quotations raised for each lead on this page ──
+  const [quotationCounts, setQuotationCounts] = useState<Record<string, number>>({});
+  const [quotationLead, setQuotationLead] = useState<AMCLeadResponse | null>(null);
 
   const handleStatusChange = async (id: string, status: AMCLeadStatus, lead: AMCLeadResponse) => {
     // AMC_WON is special — same pattern as Sales Leads intercepting "WON":
@@ -218,6 +224,9 @@ export default function AMCLeadsPage() {
       setAMCLeads(data.content);
       setTotalPages(data.totalPages);
       setTotalElements(data.totalElements);
+      fetchAmcLeadQuotationCounts(data.content.map((l) => l.id))
+        .then(setQuotationCounts)
+        .catch(() => setQuotationCounts({}));
     } catch (e: unknown) {
       const err = e as { 
         response?: { status?: number; data?: { message?: string } }; 
@@ -367,6 +376,16 @@ export default function AMCLeadsPage() {
           <h3 className="text-headline-lg font-semibold text-on-surface">AMC Leads</h3>
           <p className="text-body-md text-secondary mt-0.5">{loading ? "Loading…" : `${totalElements} total AMC leads`}</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        {/* All AMC quotations (Quotations page, AMC tab). A new one for a
+            particular client is raised from that lead's "+ Quotation". */}
+        <button
+          onClick={() => navigate("/quotations?tab=amc")}
+          className="flex items-center gap-2 px-4 py-2.5 border border-primary/40 text-primary rounded-lg text-body-md font-semibold hover:bg-primary/10 transition-all"
+        >
+          <span className="material-symbols-outlined text-[18px]">description</span>
+          AMC Quotations
+        </button>
         <button
           onClick={() => {
             setAddForm(EMPTY_FORM);
@@ -378,6 +397,7 @@ export default function AMCLeadsPage() {
           <span className="material-symbols-outlined text-[18px]">add</span>
           New AMC Lead
         </button>
+        </div>
       </div>
 
       {/* Search + filter */}
@@ -442,12 +462,98 @@ export default function AMCLeadsPage() {
       )}
 
       {/* Table */}
+      {/* ── Phone: one card per AMC lead (the table below is for laptops) ── */}
+      <div className="lg:hidden space-y-2.5">
+        {loading ? (
+          <div className="glass-card rounded-xl p-6 text-center text-body-sm text-secondary">Loading…</div>
+        ) : amcLeads.length === 0 ? (
+          <div className="glass-card rounded-xl p-6 text-center text-body-sm text-secondary">
+            No AMC leads found. {search || statusFilter !== "ALL" ? "Try clearing your filters." : ""}
+          </div>
+        ) : (
+          amcLeads.map((amcLead) => {
+            const av = avatarColor(amcLead.contactName || amcLead.companyName);
+            const ini = initials(amcLead.contactName || amcLead.companyName || "?");
+            const today = new Date().toISOString().split("T")[0];
+            const digits = (amcLead.phone ?? "").replace(/\D/g, "");
+            return (
+              <div key={amcLead.id} className="glass-card rounded-xl p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-bold shrink-0 ${av}`}>{ini}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-on-surface leading-tight break-words">{amcLead.companyName || "—"}</p>
+                    <p className="text-[12px] text-secondary truncate">{[amcLead.contactName, amcLead.email].filter(Boolean).join(" · ")}</p>
+                  </div>
+                  {statusLoading === amcLead.id ? (
+                    <span className="text-[11px] text-secondary animate-pulse">Updating…</span>
+                  ) : (
+                    <select
+                      value={amcLead.status}
+                      onChange={(e) => handleStatusChange(amcLead.id, e.target.value as AMCLeadStatus, amcLead)}
+                      aria-label="Status"
+                      className={`shrink-0 max-w-[130px] border rounded-full px-2.5 py-1 text-[10.5px] font-bold uppercase outline-none
+                        ${(STATUS_CONFIG[amcLead.status] ?? STATUS_CONFIG.NEW).bg}
+                        ${(STATUS_CONFIG[amcLead.status] ?? STATUS_CONFIG.NEW).text}
+                        ${(STATUS_CONFIG[amcLead.status] ?? STATUS_CONFIG.NEW).border}`}
+                    >
+                      {AMC_LEAD_STATUSES.map((st) => (
+                        <option key={st.value} value={st.value}>{st.label}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-secondary">
+                  <span>{amcLead.certificationType || "—"}{amcLead.certificateNumber ? ` · ${amcLead.certificateNumber}` : ""}</span>
+                  {amcLead.assignedToEmail && <span>👤 {assigneeName(amcLead.assignedToEmail)}</span>}
+                </div>
+                {amcLead.nextFollowUpDate && (
+                  <p
+                    className={`mt-2 rounded-lg px-3 py-2 text-[12px] ${
+                      amcLead.nextFollowUpDate < today
+                        ? "bg-red-50 text-red-700"
+                        : amcLead.nextFollowUpDate === today
+                        ? "bg-amber-50 text-amber-800"
+                        : "bg-surface-container-low text-secondary"
+                    }`}
+                  >
+                    ⏰ Follow-up {new Date(amcLead.nextFollowUpDate).toLocaleDateString("en-IN")}
+                  </p>
+                )}
+                <div className="mt-3 grid grid-cols-4 gap-1.5 text-[12px] font-semibold">
+                  {digits ? (
+                    <a href={`tel:${amcLead.phone}`} className="py-2 rounded-lg bg-green-50 text-green-800 text-center">📞 Call</a>
+                  ) : (
+                    <span className="py-2 rounded-lg bg-gray-50 text-gray-300 text-center">📞 Call</span>
+                  )}
+                  <button
+                    onClick={() =>
+                      quotationCounts[amcLead.id]
+                        ? setQuotationLead(amcLead)
+                        : navigate(`/quotations?new=1&amcLeadId=${amcLead.id}`)
+                    }
+                    className="py-2 rounded-lg bg-blue-50 text-blue-800"
+                  >
+                    🧾 {quotationCounts[amcLead.id] ? `Quote (${quotationCounts[amcLead.id]})` : "+ Quote"}
+                  </button>
+                  <button onClick={() => openEdit(amcLead)} className="py-2 rounded-lg bg-surface-container-low text-on-surface">
+                    ✏️ Edit
+                  </button>
+                  <button onClick={() => handleConvertClick(amcLead)} className="py-2 rounded-lg bg-emerald-50 text-emerald-800">
+                    ✅ Convert
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
       <div className="glass-card rounded-xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-container-highest/30 border-b border-outline-variant/20">
-                {["Company", "Contact", "Email", "Certificate", "Date", "Follow-up", "Assigned To", "Status", "Actions"].map((h, i) => (
+                {["Company", "Contact", "Email", "Certificate", "Quotation", "Date", "Follow-up", "Assigned To", "Status", "Actions"].map((h, i) => (
                   <th key={h} className="px-6 py-4 text-label-caps text-outline uppercase tracking-wider whitespace-nowrap">
                     <div className="flex items-center gap-1">
                       {h}
@@ -463,7 +569,7 @@ export default function AMCLeadsPage() {
                 [...Array(5)].map((_, i) => <SkeletonRow key={i} />)
               ) : amcLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     <div className="flex flex-col items-center gap-3 py-16 text-secondary">
                       <span className="material-symbols-outlined text-[48px] text-outline" style={{ fontVariationSettings: "'FILL' 0, 'wght' 200, 'GRAD' 0, 'opsz' 48" }}>
                         person_search
@@ -497,6 +603,32 @@ export default function AMCLeadsPage() {
                         <div className="text-body-md text-secondary">
                           <p className="font-medium">{amcLead.certificationType || "—"}</p>
                           <p className="text-[11px] text-outline">{amcLead.certificateNumber || "—"}</p>
+                        </div>
+                      </td>
+
+                      {/* Quotation — AMC quotations sent to this client. Count
+                          opens them; "+ Quotation" raises a new AMC one
+                          with the client details filled from this lead. */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {quotationCounts[amcLead.id] ? (
+                            <button
+                              onClick={() => setQuotationLead(amcLead)}
+                              title="View quotations sent to this client"
+                              className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-[11px] font-bold text-green-800 hover:bg-green-200"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">description</span>
+                              {quotationCounts[amcLead.id]}
+                            </button>
+                          ) : null}
+                          <button
+                            onClick={() => navigate(`/quotations?new=1&amcLeadId=${amcLead.id}`)}
+                            title="Create an AMC quotation for this lead"
+                            className="inline-flex items-center gap-1 rounded-lg border border-primary/30 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary/10"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">add</span>
+                            Quotation
+                          </button>
                         </div>
                       </td>
 
@@ -786,6 +918,18 @@ export default function AMCLeadsPage() {
           </form>
         </Modal>
       )}
+
+      {/* AMC quotations of one lead (Quotation column) */}
+      <QuotationLookupModal
+        isOpen={quotationLead !== null}
+        amcLeadId={quotationLead?.id}
+        clientLabel={
+          quotationLead
+            ? [quotationLead.companyName, quotationLead.contactName].filter(Boolean).join(" · ")
+            : undefined
+        }
+        onClose={() => setQuotationLead(null)}
+      />
 
       {/* Follow-up Date Modal */}
       {followUpLead && (

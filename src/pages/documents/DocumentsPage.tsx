@@ -292,8 +292,44 @@ export default function DocumentsPage() {
         </div>
       )}
 
+      {/* ── Phone: one card per document (the table below is for laptops) ── */}
+      <div className="lg:hidden space-y-2.5">
+        {loading ? (
+          <div className="glass-card rounded-xl p-6 text-center text-body-sm text-secondary">Loading…</div>
+        ) : docs.length === 0 ? (
+          <div className="glass-card rounded-xl p-6 text-center text-body-sm text-secondary">No documents found.</div>
+        ) : (
+          docs.map((doc) => {
+            const exp = expiryState(doc.expiryDate);
+            return (
+              <div key={doc.id} className="glass-card rounded-xl p-4 shadow-sm">
+                <p className="font-semibold text-on-surface break-all">{doc.fileName}</p>
+                <p className="text-[11px] text-outline">{formatBytes(doc.fileSize)} · {doc.uploadedBy}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-secondary">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold border uppercase bg-tertiary/10 text-tertiary border-tertiary/20">
+                    {DOCUMENT_TYPE_LABEL[doc.documentType]}
+                  </span>
+                  {doc.projectName && <span className="break-words">{doc.projectName}</span>}
+                  <span>📅 {new Date(doc.uploadedAt).toLocaleDateString("en-IN")}</span>
+                  {doc.expiryDate && (
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold border uppercase ${EXPIRY_STYLE[exp ?? "ok"]}`}>
+                      {exp === "expired" ? "Expired" : exp === "soon" ? "Expiring Soon" : "Valid"} · {new Date(doc.expiryDate).toLocaleDateString("en-IN")}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-1.5 text-[12px] font-semibold">
+                  <button onClick={() => setPreviewDoc(doc)} className="py-2 rounded-lg bg-primary/10 text-primary">View</button>
+                  <a href={doc.fileUrl} download={doc.fileName} className="py-2 rounded-lg bg-surface-container-low text-on-surface text-center">Download</a>
+                  <button onClick={() => setDeleteId(doc.id)} className="py-2 rounded-lg bg-red-50 text-red-700">Delete</button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
       {/* ── Data table ─────────────────────────────────────────────────────── */}
-      <div className="glass-card rounded-xl overflow-hidden shadow-sm">
+      <div className="hidden lg:block glass-card rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>

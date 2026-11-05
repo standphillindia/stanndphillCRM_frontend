@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   fetchDelayedProjects,
   fetchProjectStages,
@@ -39,8 +39,23 @@ import {
   type ReadyToWonLeadResponse,
 } from "../../services/leadService";
 import { fetchDepartments, type OrgSetupOption } from "../../services/orgsetupservice";
+import {
+  fetchAccessLockSetting,
+  setAccessLockSetting,
+  fetchLeadFinanceLockSetting,
+  setLeadFinanceLockSetting,
+  type AccessLockSetting,
+} from "../../services/settingsService";
+import { useToastNotification } from "../../hooks/useToastNotification";
+import { usePermissions } from "../../hooks/usePermissions";
+import { ADMIN_PANEL_TAB_MODULE } from "../../constants/permissionConstants";
+import { useAuth } from "../../context/AuthContext";
+import { getRoleFromToken } from "../../utils/jwt";
+import LoginTimeTab from "./LoginTimeTab";
+import VisitApprovalsTab from "./VisitApprovalsTab";
+import { getApiErrorMessage, getApiErrorTitle } from "../../utils/apiError";
 
-type Tab = "company" | "lookup" | "system" | "activity" | "users" | "delayed" | "readytowon" | "engineervisits";
+type Tab = "company" | "lookup" | "system" | "activity" | "logintime" | "users" | "delayed" | "readytowon" | "engineervisits" | "visitapprovals";
 
 const inputCls =
   "w-full px-3 py-2.5 bg-surface border border-outline-variant/30 rounded-lg " +
@@ -285,6 +300,144 @@ function LookupTab() {
   );
 }
 
+// ── Access lock switch ────────────────────────────────────────────────────────
+//
+// When a stage or a PI goes past its date the CRM locks it: the work
+// can't be marked done until an Admin reopens it. That rule assumes a
+// team that already knows the system. While people are still learning it,
+// every lock is somebody stuck waiting — so it is a switch, not a line of
+// code somebody has to comment out and remember to put back.
+//
+// Turning it off changes nothing about what the CRM notices: stages still
+// go LATE, Delayed Projects still lists them, notifications still go out.
+// It only stops the blocking. Rows locked earlier keep their flag, so
+// switching it back on restores exactly the state it had.
+
+type LockKind = "project" | "lead";
+
+const LOCK_COPY: Record<LockKind, {
+  title: string;
+  description: string;
+  onMsg: string;
+  offMsg: string;
+  fetch: () => Promise<AccessLockSetting>;
+  save: (enabled: boolean) => Promise<AccessLockSetting>;
+}> = {
+  project: {
+    title: "Project stage lock",
+    description:
+      "Locks a project stage once it goes past its due date — it can't be marked done until an Admin reopens it. " +
+      "Switching it off releases every stage lock currently held and stops new ones; late stages are still flagged " +
+      "and still appear in Delayed Projects.",
+    onMsg: "Late project stages will be locked again from tonight's check until an Admin reopens them.",
+    offMsg: "No project stage will be locked. Late stages are still flagged and still show in Delayed Projects.",
+    fetch: fetchAccessLockSetting,
+    save: setAccessLockSetting,
+  },
+  lead: {
+    title: "Lead PI / TI lock",
+    description:
+      "Locks a lead's PI if it isn't raised the same day it was requested, and its TI if it isn't generated the same " +
+      "day payment comes in — only an Admin can reauthorize it. Switching it off releases every PI/TI lock currently " +
+      "held and stops new ones. Project stages are not affected.",
+    onMsg: "Late PIs/TIs will be locked again from tonight's check until an Admin reauthorizes them.",
+    offMsg: "No lead PI/TI will be locked. Finance can raise PIs and TIs freely.",
+    fetch: fetchLeadFinanceLockSetting,
+    save: setLeadFinanceLockSetting,
+  },
+};
+
+function AccessLockCard({ kind }: { kind: LockKind }) {
+  const copy = LOCK_COPY[kind];
+  const toast = useToastNotification();
+  const [setting, setSetting] = useState<AccessLockSetting | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    copy.fetch()
+      .then(setSetting)
+      .catch(() => setSetting(null))
+      .finally(() => setLoading(false));
+  }, [copy]);
+
+  const toggle = async () => {
+    if (!setting || saving) return;
+    const next = !setting.enabled;
+    setSaving(true);
+    try {
+      const saved = await copy.save(next);
+      setSetting(saved);
+      toast.success(
+        `${copy.title} is ${next ? "ON" : "OFF"}`,
+        next
+          ? copy.onMsg
+          : saved.releasedLocks > 0
+            ? `${saved.releasedLocks} locked item${saved.releasedLocks === 1 ? "" : "s"} released. ${copy.offMsg}`
+            : copy.offMsg
+      );
+    } catch (e) {
+      toast.error(
+        getApiErrorTitle(e, "Couldn't change the setting"),
+        getApiErrorMessage(e, "Try again in a moment.")
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="glass-card rounded-xl p-6 text-body-md text-secondary animate-pulse">Loading…</div>;
+  }
+  if (!setting) {
+    return (
+      <div className="glass-card rounded-xl p-6 text-body-md text-secondary">
+        Couldn't load the {copy.title.toLowerCase()} setting.
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass-card rounded-xl p-6">
+      <div className="flex items-start justify-between gap-6 flex-wrap">
+        <div className="max-w-xl">
+          <h3 className="text-headline-md font-semibold text-on-surface mb-1">{copy.title}</h3>
+          <p className="text-body-sm text-secondary">{copy.description}</p>
+          {setting.updatedByEmail && (
+            <p className="text-body-sm text-secondary mt-2">
+              Last changed by {setting.updatedByEmail}
+              {setting.updatedAt ? ` on ${new Date(setting.updatedAt).toLocaleDateString()}` : ""}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className={`text-body-md font-medium ${setting.enabled ? "text-on-surface" : "text-secondary"}`}>
+            {setting.enabled ? "On" : "Off"}
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={setting.enabled}
+            aria-label={copy.title}
+            disabled={saving}
+            onClick={toggle}
+            className={`relative w-14 h-8 rounded-full transition-colors disabled:opacity-50 ${
+              setting.enabled ? "bg-primary" : "bg-outline-variant/40"
+            }`}
+          >
+            <span
+              className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-all ${
+                setting.enabled ? "left-7" : "left-1"
+              }`}
+            />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── System Config tab ─────────────────────────────────────────────────────────
 
 function SystemConfigTab() {
@@ -320,6 +473,10 @@ function SystemConfigTab() {
   const previewInvoiceNo = `${form.invoicePrefix}-${form.invoiceStartNumber}`;
 
   return (
+    <div className="space-y-4">
+    <AccessLockCard kind="project" />
+    <AccessLockCard kind="lead" />
+
     <div className="glass-card rounded-xl p-6 space-y-6">
       <div>
         <h3 className="text-headline-md font-semibold text-on-surface mb-1">Invoice Numbering</h3>
@@ -380,6 +537,7 @@ function SystemConfigTab() {
       </div>
 
       <SaveBar dirty={dirty} saving={saving} saved={saved} onSave={handleSave} />
+      </div>
     </div>
   );
 }
@@ -399,7 +557,19 @@ const MODULE_ICON: Record<string, string> = {
 
 const PAGE_SIZE = 25;
 
+/** Where clicking an activity row should go — null when there's nothing to open. */
+const activityLink = (e: ActivityLogEntry): string | null => {
+  if (!e.entityId || !e.entityName) return null; // deleted or unknown
+  switch (e.entityType) {
+    case "LEAD":    return `/leads?leadId=${e.entityId}`;
+    case "PROJECT": return `/projects/${e.entityId}/stages`;
+    case "USER":    return "/users";
+    default:        return null;
+  }
+};
+
 function ActivityLogTab() {
+  const navigate = useNavigate();
   const [entries, setEntries]   = useState<ActivityLogEntry[]>([]);
   const [loading, setLoading]   = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -476,7 +646,7 @@ function ActivityLogTab() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search actions…"
+            placeholder="Search company, project, user or action…"
             className="w-full pl-10 pr-4 py-2.5 bg-surface border border-outline-variant/30
               rounded-lg text-body-md text-on-surface outline-none
               focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
@@ -570,21 +740,46 @@ function ActivityLogTab() {
           <div className="p-10 text-center text-body-md text-secondary animate-pulse">Loading…</div>
         ) : (
           <div className="divide-y divide-outline-variant/10">
-            {entries.map((e) => (
-              <div key={e.id} className="flex items-start gap-3 px-6 py-4">
-                <span className="material-symbols-outlined text-[18px] text-primary mt-0.5">
-                  {MODULE_ICON[e.module] ?? "history"}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-body-md text-on-surface">
-                    <span className="font-semibold">{e.user}</span> — {e.action}
-                  </p>
-                  <p className="text-[11px] text-outline mt-0.5">
-                    {e.module} · {new Date(e.timestamp).toLocaleString("en-IN")}
-                  </p>
+            {entries.map((e) => {
+              const link = activityLink(e);
+              return (
+                <div
+                  key={e.id}
+                  onClick={link ? () => navigate(link) : undefined}
+                  role={link ? "link" : undefined}
+                  title={link ? "Open" : undefined}
+                  className={`flex items-start gap-3 px-6 py-4 ${
+                    link ? "cursor-pointer hover:bg-surface-container-low transition-colors" : ""
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[18px] text-primary mt-0.5">
+                    {MODULE_ICON[e.module] ?? "history"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-body-md text-on-surface">
+                      <span className="font-semibold">{e.user}</span> — {e.action}
+                    </p>
+                    {(e.entityId || e.detail) && (
+                      <p className="text-body-sm mt-0.5">
+                        {e.entityId && (
+                          e.entityName
+                            ? <span className="font-medium text-primary">{e.entityName}</span>
+                            : <span className="text-outline italic">deleted {e.module.toLowerCase().replace(/s$/, "")}</span>
+                        )}
+                        {e.entityId && e.detail && <span className="text-outline"> · </span>}
+                        {e.detail && <span className="text-on-surface-variant">{e.detail}</span>}
+                      </p>
+                    )}
+                    <p className="text-[11px] text-outline mt-0.5">
+                      {e.module} · {new Date(e.timestamp).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  {link && (
+                    <span className="material-symbols-outlined text-[18px] text-outline self-center">chevron_right</span>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {entries.length === 0 && (
               <p className="text-body-sm text-secondary text-center py-10">
                 {hasActiveFilters ? "No activity matches these filters." : "No activity recorded yet."}
@@ -636,6 +831,7 @@ interface DelayedProjectLite {
 }
 
 function DelayedProjectsTab() {
+  const toast = useToastNotification();
   const [projects, setProjects] = useState<DelayedProjectLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -685,8 +881,7 @@ function DelayedProjectsTab() {
       setStagesByProject((prev) => ({ ...prev, [projectId]: stages }));
       await load();
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { message?: string } }; message?: string };
-      alert(err?.response?.data?.message ?? err?.message ?? "Could not reauthorize.");
+      toast.error(getApiErrorTitle(e, "Not reauthorized"), getApiErrorMessage(e, "Could not reauthorize."));
     } finally {
       setBusyStageId(null);
     }
@@ -825,6 +1020,8 @@ function EngineerVisitsTab() {
     SCHEDULED: "bg-amber-100 text-amber-800",
     COMPLETED: "bg-emerald-100 text-emerald-800",
     FAILED: "bg-red-100 text-red-800",
+    PENDING_APPROVAL: "bg-blue-100 text-blue-800",
+    CANCELLED: "bg-gray-200 text-gray-700",
   };
 
   if (loading) return <div className="glass-card rounded-xl p-8 text-center text-secondary">Loading engineer visits…</div>;
@@ -1208,14 +1405,23 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "lookup",   label: "Lookup Data",     icon: "list_alt" },
   { key: "system",   label: "System Config",   icon: "settings" },
   { key: "activity", label: "Activity Log",    icon: "history" },
+  { key: "logintime", label: "Login Time",     icon: "schedule" },
   { key: "users",    label: "Users & Roles",   icon: "group" },
   { key: "delayed",  label: "Delayed Projects", icon: "warning" },
   { key: "readytowon", label: "Ready to Won", icon: "verified" },
   { key: "engineervisits", label: "Engineer Visits", icon: "photo_camera" },
+  { key: "visitapprovals", label: "Visit Approvals", icon: "event_available" },
 ];
 
 export default function AdminPanelPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("company");
+  // Admin sees every tab; any other role only the tabs it was given in
+  // Users → Roles & Permissions (see ADMIN_PANEL_TAB_MODULE).
+  const { token } = useAuth();
+  const isAdminRole = getRoleFromToken(token) === "ADMIN";
+  const perms = usePermissions();
+  const tabs = TABS.filter((t) => isAdminRole || perms.can(ADMIN_PANEL_TAB_MODULE[t.key]));
+  const [picked, setActiveTab] = useState<Tab | null>(null);
+  const activeTab: Tab | undefined = picked && tabs.some((t) => t.key === picked) ? picked : tabs[0]?.key;
 
   return (
     <div className="max-w-[1100px] mx-auto space-y-6">
@@ -1225,12 +1431,13 @@ export default function AdminPanelPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-1 border-b border-outline-variant/20">
-        {TABS.map((tab) => (
+      {/* One row that scrolls sideways on a phone; wraps on a laptop. */}
+      <div className="flex lg:flex-wrap gap-1 border-b border-outline-variant/20 overflow-x-auto">
+        {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 px-4 py-3 text-body-sm font-semibold border-b-2 -mb-px transition-colors
+            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-3 lg:px-4 py-3 text-body-sm font-semibold border-b-2 -mb-px transition-colors
               ${activeTab === tab.key
                 ? "border-primary text-primary"
                 : "border-transparent text-secondary hover:text-on-surface"
@@ -1246,10 +1453,12 @@ export default function AdminPanelPage() {
       {activeTab === "lookup"   && <LookupTab />}
       {activeTab === "system"   && <SystemConfigTab />}
       {activeTab === "activity" && <ActivityLogTab />}
+      {activeTab === "logintime" && <LoginTimeTab />}
       {activeTab === "users"    && <UsersShortcutTab />}
       {activeTab === "delayed"  && <DelayedProjectsTab />}
       {activeTab === "readytowon" && <ReadyToWonTab />}
       {activeTab === "engineervisits" && <EngineerVisitsTab />}
+      {activeTab === "visitapprovals" && <VisitApprovalsTab />}
     </div>
   );
 }

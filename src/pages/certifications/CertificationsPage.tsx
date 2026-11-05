@@ -162,9 +162,9 @@ export default function CertificationsPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-0 lg:p-6">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-4 lg:mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Certifications</h1>
         <p className="text-gray-500 mt-1">Track and manage all certifications and compliance records</p>
       </div>
@@ -227,7 +227,45 @@ export default function CertificationsPage() {
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Phone / tablet: one card per certificate. The table is for laptops. */}
+          <div className="lg:hidden divide-y">
+            {certifications.map((cert) => {
+              const daysLeft = daysUntilExpiry(cert.expiryDate);
+              return (
+                <div key={cert.id} className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-bold text-gray-900 break-all">{cert.certificateNo}</span>
+                    <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${getStatusColor(cert.status)}`}>
+                      {getStatusIcon(cert.status)}
+                      {cert.status.replace(/_/g, " ")}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-800">{cert.companyName}</p>
+                  <p className="text-xs text-gray-500 break-words">{cert.projectName}</p>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+                    <span>{cert.certificationType}</span>
+                    <span>Issued {formatDate(cert.issueDate)}</span>
+                    <span className={daysLeft > 0 ? "" : "text-red-600 font-medium"}>
+                      Expiry {formatDate(cert.expiryDate)} · {daysLeft > 0 ? `${daysLeft} days left` : "Expired"}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm font-semibold">
+                    <button onClick={() => viewDetails(cert)} className="py-2.5 rounded-xl bg-blue-50 text-blue-700">View</button>
+                    {cert.status !== "EXPIRED" && (
+                      <button
+                        onClick={() => handleRenew(cert.id)}
+                        disabled={renewing === cert.id}
+                        className="py-2.5 rounded-xl bg-green-50 text-green-700 disabled:opacity-50"
+                      >
+                        {renewing === cert.id ? "Renewing…" : "Renew"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">
@@ -333,8 +371,8 @@ export default function CertificationsPage() {
 
       {/* Details Modal */}
       {showDetails && selectedCert && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-0 sm:p-4">
+          <div className="bg-white sm:rounded-xl shadow-2xl w-full max-w-2xl p-4 sm:p-6 h-full sm:h-auto max-h-full sm:max-h-[80vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between mb-6 pb-4 border-b">
               <div>

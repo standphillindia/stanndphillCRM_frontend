@@ -7,11 +7,14 @@ import { useState, useEffect } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { logoutUser } from "../services/authService";
 import { fetchMyModules } from "../services/permissionService";
+import { usePermissions } from "../hooks/usePermissions";
+import { ADMIN_PANEL_MODULES } from "../constants/permissionConstants";
 import { fetchTasks } from "../services/taskService";
 import logo from "../assets/logo.png";
 import NotificationBell from "../pages/Notification/Notoficationbell";
 import { useAuth } from "../context/AuthContext";
 import { getRoleFromToken } from "../utils/jwt";
+import { visitRoles } from "../utils/visitPermissions";
 
 // ── Nav items (matches AppRouter routes + design reference icons) ─────────────
 interface NavItemConfig {
@@ -24,13 +27,36 @@ interface NavItemConfig {
   // should always show regardless of permission (Dashboard, Tasks — Tasks
   // has no dedicated module on the backend yet).
   module?: string;
+  // Only for Engineers (role or department) and Admin — e.g. Visit Expenses.
+  engineerOrAdmin?: boolean;
 }
+
+// Visit Expenses: Engineers / Admin see it by their Visit Expenses row; any
+// role given "Visit Expenses — all claims" (e.g. Finance) sees it as well.
+const navAllowed = (
+  item: { module?: string; engineerOrAdmin?: boolean },
+  allowed: string[],
+  engineerOrAdmin: boolean,
+) =>
+  (item.engineerOrAdmin && allowed.includes("VISIT_EXPENSES_REVIEW")) ||
+  ((!item.module || allowed.includes(item.module)) && (!item.engineerOrAdmin || engineerOrAdmin));
 
 const NAV_ITEMS: NavItemConfig[] = [
   {
     path: "/dashboard",
     label: "Dashboard",
     icon: "dashboard",
+    module: "DASHBOARD",
+  },
+  {
+    path: "/reports",
+    label: "Reports",
+    // No `module` gate, same as Dashboard: the report endpoints scope
+    // themselves — an admin sees the whole book, anyone else sees only
+    // their own leads — so there is nothing here to hide.
+    icon: "insights",
+    // Page access only (Users → Roles & Permissions).
+    module: "REPORTS",
   },
   {
     path: "/leads",
@@ -57,12 +83,45 @@ const NAV_ITEMS: NavItemConfig[] = [
     module: "PROJECTS",
   },
   {
+    path: "/completed-projects",
+    label: "Completed Projects",
+    icon: "workspace_premium",
+    // Every department (Digital Marketing included) can see which projects
+    // finished by default; the list carries no amounts. Page access only.
+    module: "COMPLETED_PROJECTS",
+  },
+  {
     path: "/my-tasks",
     label: "My Tasks",
     icon: "task_alt",
     // No `module` restriction — every department (Operations, Engineering,
     // Finance, Admin) needs their own stage-tracker task list; the backend
     // itself scopes the results to the logged-in user's department.
+    // Page access only — on for every role by default.
+    module: "MY_TASKS",
+  },
+  {
+    path: "/dtr",
+    label: "My DTR",
+    icon: "edit_note",
+    // Daily Task Report — every role fills their own.
+    module: "DTR",
+  },
+  {
+    path: "/dtr/team",
+    label: "Team DTR",
+    icon: "groups",
+    // Everyone's DTR — Admin and HR by default.
+    module: "DTR_TEAM",
+  },
+  {
+    path: "/visit-expenses",
+    label: "Visit Expenses",
+    icon: "receipt_long",
+    // Engineers add each factory visit's expense here; Admin reviews them.
+    // Shown only to Engineers / Admin, and only if their role has Read on it.
+    engineerOrAdmin: true,
+    module: "VISIT_EXPENSES",
   },
   {
     path: "/tasks",
@@ -71,6 +130,8 @@ const NAV_ITEMS: NavItemConfig[] = [
     // Same as My Tasks — no module gate. Ad-hoc items (client issues,
     // lab-test follow-ups) can be assigned to anyone, so everyone needs to
     // see this list to find work assigned to them.
+    // Page access only — on for every role by default.
+    module: "URGENT_TASKS",
   },
   {
     path: "/payments",
@@ -87,6 +148,8 @@ const NAV_ITEMS: NavItemConfig[] = [
         path: "/payments/leads",
         label: "Leads",
         icon: "handshake",
+        // Pre-WON leads for Finance — its own row in Roles & Permissions.
+        module: "LEADS_FINANCE",
       },
       {
         path: "/payments/list",
@@ -102,6 +165,11 @@ const NAV_ITEMS: NavItemConfig[] = [
         path: "/payments/amc",
         label: "AMC",
         icon: "security",
+      },
+      {
+        path: "/payments/invoice-report",
+        label: "Invoice Report",
+        icon: "receipt_long",
       },
     ],
   },
@@ -145,14 +213,20 @@ const NAV_ITEMS: NavItemConfig[] = [
 // Map route → page title shown in topbar
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
+  "/reports": "Reports",
   "/leads": "Leads",
   "/leads/amc-leads": "AMC Leads",
   "/projects": "Projects",
+  "/completed-projects": "Completed Projects",
   "/payments": "Payments",
   "/payments/dashboard": "Payment Dashboard",
   "/payments/leads": "Leads — Pre-WON Finance",
   "/payments/list": "Payments",
   "/payments/amc": "AMC Payments",
+  "/payments/invoice-report": "Invoice Report",
+  "/visit-expenses": "Visit Expenses",
+  "/dtr": "My DTR",
+  "/dtr/team": "Team DTR",
   "/documents": "Documents",
   "/certifications": "Certifications",
   "/users": "Users",
@@ -177,6 +251,9 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const location = useLocation();
   const { token } = useAuth();
   const isAdmin = getRoleFromToken(token) === "ADMIN";
+  // Admin Panel button: Admin, or a role given any Admin Panel screen.
+  const perms = usePermissions();
+  const canOpenAdminPanel = isAdmin || ADMIN_PANEL_MODULES.some((m) => perms.can(m));
   const [loggingOut, setLoggingOut] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
@@ -235,8 +312,12 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
       .catch(() => setTaskCounts(null)); // fail silent — badge just won't show
   }, []);
 
+  const canSeeVisitExpenses = (() => {
+    const r = visitRoles(token);
+    return r.isAdmin || r.isEngineer;
+  })();
   const visibleNavItems = (allowedModules === null ? [] : NAV_ITEMS).filter(
-    (item) => !item.module || allowedModules!.includes(item.module),
+    (item) => navAllowed(item, allowedModules!, canSeeVisitExpenses),
   );
 
   const handleLogout = async () => {
@@ -245,7 +326,13 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
     navigate("/login");
   };
 
-  const isActive = (path: string) => location.pathname.startsWith(path);
+  // A longer menu path that also matches wins, so on /dtr/team only
+  // "Team DTR" lights up, not "My DTR" as well.
+  const isActive = (path: string) =>
+    location.pathname.startsWith(path) &&
+    !NAV_ITEMS.some(
+      (n) => n.path !== path && n.path.startsWith(path + "/") && location.pathname.startsWith(n.path)
+    );
   const toggleExpand = (path: string) => {
     setExpandedItems((prev) =>
       prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path],
@@ -299,7 +386,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
 
           {itemExpanded && (
             <div className="pl-6 space-y-0.5 py-1">
-              {item.children?.map((child) => (
+              {item.children?.filter((child) => !child.module || (allowedModules ?? []).includes(child.module)).map((child) => (
                 <NavLink
                   key={child.path}
                   to={child.path}
@@ -431,7 +518,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         {/* User card — click to open Admin Panel. Admin-only: it's a
             shortcut into the Admin Panel, not a personal profile card, so
             other roles shouldn't see it at all. */}
-        {isAdmin && (
+        {canOpenAdminPanel && (
           <button
             onClick={() => navigate("/admin")}
             className={`w-full glass-card rounded-xl p-3 flex items-center gap-3 text-left
@@ -443,7 +530,7 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
             </div>
             <div className="overflow-hidden flex-1 min-w-0">
               <p className="text-[13px] font-semibold text-on-surface truncate leading-tight">
-                Admin
+                {isAdmin ? "Admin" : "Admin Panel"}
               </p>
               <p className="text-[11px] text-secondary truncate leading-tight mt-0.5">
                 Standphill CRM
@@ -470,6 +557,84 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
         </button>
       </div>
     </div>
+  );
+}
+
+// ── Phone bottom menu ─────────────────────────────────────────────────────────
+// The four pages a person uses most, out of the ones their role can open
+// (same rules as the sidebar), plus "More" for the full menu. An engineer
+// gets My Tasks and Expenses here; Sales gets Leads.
+const BOTTOM_NAV_ORDER: { path: string; label: string }[] = [
+  { path: "/dashboard", label: "Home" },
+  { path: "/my-tasks", label: "My Tasks" },
+  { path: "/visit-expenses", label: "Expenses" },
+  { path: "/leads", label: "Leads" },
+  { path: "/projects", label: "Projects" },
+  { path: "/payments", label: "Payments" },
+];
+
+function MobileBottomNav({ onMore }: { onMore: () => void }) {
+  const { token } = useAuth();
+  const [allowedModules, setAllowedModules] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    fetchMyModules()
+      .then(setAllowedModules)
+      .catch(() => setAllowedModules([]));
+  }, []);
+
+  const r = visitRoles(token);
+  const canSeeVisitExpenses = r.isAdmin || r.isEngineer;
+  const items = BOTTOM_NAV_ORDER
+    .map((b) => {
+      const nav = NAV_ITEMS.find((n) => n.path === b.path);
+      return nav ? { ...b, icon: nav.icon, module: nav.module, engineerOrAdmin: nav.engineerOrAdmin } : null;
+    })
+    .filter((n): n is NonNullable<typeof n> =>
+      !!n &&
+      allowedModules !== null &&
+      navAllowed(n, allowedModules, canSeeVisitExpenses))
+    .slice(0, 4);
+
+  const itemCls = (active: boolean) =>
+    [
+      "flex flex-col items-center justify-center gap-0.5 min-w-[56px] px-2 py-1 rounded-xl transition-all active:scale-90",
+      active ? "text-primary" : "text-on-surface-variant",
+    ].join(" ");
+
+  return (
+    <nav
+      className="lg:hidden fixed bottom-0 left-0 w-full
+      bg-surface/90 backdrop-blur-xl
+      border-t border-outline-variant/10
+      flex justify-around items-center px-2 pt-1.5
+      z-40 rounded-t-xl shadow-lg"
+      style={{ paddingBottom: "max(6px, env(safe-area-inset-bottom))" }}
+    >
+      {items.map((item) => (
+        <NavLink key={item.path} to={item.path} className={({ isActive }) => itemCls(isActive)}>
+          {({ isActive }) => (
+            <>
+              <span
+                className={`material-symbols-outlined text-[22px] rounded-full px-3 ${isActive ? "bg-primary/10" : ""}`}
+                style={{
+                  fontVariationSettings: isActive
+                    ? "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24"
+                    : "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24",
+                }}
+              >
+                {item.icon}
+              </span>
+              <span className="text-[10.5px] font-semibold leading-none">{item.label}</span>
+            </>
+          )}
+        </NavLink>
+      ))}
+      <button type="button" onClick={onMore} className={itemCls(false)} aria-label="Open full menu">
+        <span className="material-symbols-outlined text-[22px] px-3">menu</span>
+        <span className="text-[10.5px] font-semibold leading-none">More</span>
+      </button>
+    </nav>
   );
 }
 
@@ -605,47 +770,7 @@ export default function MainLayout() {
       </div>
 
       {/* ── Mobile bottom nav bar ─────────────────────────────────────────── */}
-      <nav
-        className="lg:hidden fixed bottom-0 left-0 w-full
-        bg-surface/80 backdrop-blur-xl
-        border-t border-outline-variant/10
-        flex justify-around items-center px-4 py-2
-        z-40 rounded-t-xl shadow-lg"
-        style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}
-      >
-        {[
-          { path: "/dashboard", icon: "dashboard" },
-          { path: "/leads", icon: "person_search" },
-          { path: "/projects", icon: "business_center" },
-          { path: "/payments", icon: "payments" },
-        ].map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={({ isActive }) =>
-              [
-                "flex flex-col items-center justify-center p-2 rounded-full transition-all active:scale-90",
-                isActive
-                  ? "bg-primary/10 text-primary"
-                  : "text-on-surface-variant hover:bg-surface-variant/30",
-              ].join(" ")
-            }
-          >
-            {({ isActive }) => (
-              <span
-                className="material-symbols-outlined text-[22px]"
-                style={{
-                  fontVariationSettings: isActive
-                    ? "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24"
-                    : "'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24",
-                }}
-              >
-                {item.icon}
-              </span>
-            )}
-          </NavLink>
-        ))}
-      </nav>
+      <MobileBottomNav onMore={() => setMobileOpen(true)} />
     </div>
   );
 }

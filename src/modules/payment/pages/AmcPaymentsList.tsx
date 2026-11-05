@@ -104,7 +104,7 @@ export default function AmcPaymentsList() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-0 lg:p-6 space-y-4 lg:space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">AMC — Payments</h1>
         <p className="text-gray-600 mt-1">PI/TI issued against Annual Maintenance Contracts</p>
@@ -119,8 +119,8 @@ export default function AmcPaymentsList() {
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Find any PI / TI (search by client name or invoice number)
         </label>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap gap-2">
+          <div className="relative flex-1 min-w-full sm:min-w-0">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               value={query}
@@ -177,7 +177,34 @@ export default function AmcPaymentsList() {
         {amcs.length === 0 ? (
           <div className="p-8 text-center text-gray-500">No AMC records found.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Phone / tablet: one card per AMC. The table is for laptops. */}
+          <div className="lg:hidden divide-y divide-gray-200">
+            {amcs.map((amc) => {
+              const summary = summaries[amc.id];
+              return (
+                <div key={amc.id} className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-bold text-gray-900 break-words">{amc.amcCode}</span>
+                    <span className="shrink-0 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800">{amc.amcStatus}</span>
+                  </div>
+                  <p className="text-sm text-gray-700">{amc.clientName}</p>
+                  <div className="mt-2 flex items-center gap-4 text-xs">
+                    <span className="inline-flex items-center gap-1 text-orange-700"><FileText size={13} /> PI {summary?.totalProforma ?? 0}</span>
+                    <span className="inline-flex items-center gap-1 text-blue-700"><Receipt size={13} /> TI {summary?.totalTax ?? 0}</span>
+                    <span className="ml-auto text-gray-500">Invoiced <b className="text-green-700">₹{(summary?.totalInvoicedAmount ?? 0).toLocaleString()}</b></span>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/payments/amc/${amc.id}`)}
+                    className="mt-3 w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-blue-600"
+                  >
+                    Manage PI / TI
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -229,6 +256,7 @@ export default function AmcPaymentsList() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 

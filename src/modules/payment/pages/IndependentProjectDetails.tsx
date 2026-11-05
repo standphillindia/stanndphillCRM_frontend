@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { FileText, Plus, ArrowLeft, IndianRupee, Receipt } from "lucide-react";
+import { FileText, Plus, ArrowLeft, IndianRupee, Receipt, Pencil } from "lucide-react";
 import {
   getIndependentProjectById,
   getIndependentProjectInvoicesWithPayment,
@@ -21,6 +21,9 @@ import {
 import IndependentInvoiceFormModal from "../../../components/invoice/IndependentInvoiceFormModal";
 import AmcInvoicePreviewModal from "../../../components/invoice/AmcInvoicePreviewModal";
 import AddPaymentTransactionModal from "../components/AddPaymentTransactionModal";
+import PaymentsReceivedModal from "../components/PaymentsReceivedModal";
+import InvoiceRowCards from "../../../components/invoice/InvoiceRowCards";
+import CreateIndependentProjectModal from "../../../components/invoice/CreateIndependentProjectModal";
 
 const STATUS_STYLES: Record<string, string> = {
   PENDING: "bg-orange-100 text-orange-800",
@@ -35,13 +38,19 @@ export default function IndependentProjectDetails() {
 
   const [project, setProject] = useState<IndependentProjectDetailsResponse | null>(null);
   const [rows, setRows] = useState<ProjectInvoicePaymentRow[]>([]);
+  // A long project name (a whole scope line) is cut to 2 lines with "Read more".
+  const [showFullName, setShowFullName] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [showPiForm, setShowPiForm] = useState(false);
   const [showTiForm, setShowTiForm] = useState(false);
+  // Edit the record's own details (name, client, contract, carried forward).
+  const [showEdit, setShowEdit] = useState(false);
   const [previewInvoice, setPreviewInvoice] = useState<InvoiceDetailsResponse | null>(null);
   const [recordPaymentFor, setRecordPaymentFor] = useState<ProjectInvoicePaymentRow | null>(null);
+  // "Payments received" (date, reference no., edit) for this PI.
+  const [paymentsFor, setPaymentsFor] = useState<ProjectInvoicePaymentRow | null>(null);
   const [generatingTi, setGeneratingTi] = useState<string | null>(null);
   const [linkingTiFor, setLinkingTiFor] = useState<ProjectInvoicePaymentRow | null>(null);
   const [linkTargetPiId, setLinkTargetPiId] = useState<string>("");
@@ -141,12 +150,26 @@ export default function IndependentProjectDetails() {
   if (!project) return null;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-0 lg:p-6 space-y-4 lg:space-y-6">
       <div>
         <button onClick={() => navigate("/payments/independent")} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium mb-2">
           <ArrowLeft size={16} /> Back to Independent Projects
         </button>
-        <h1 className="text-2xl font-bold text-gray-900">{project.projectName}</h1>
+        <h1
+          title={project.projectName}
+          className={`text-xl lg:text-2xl font-bold text-gray-900 break-words ${showFullName ? "" : "line-clamp-2"}`}
+        >
+          {project.projectName}
+        </h1>
+        {(project.projectName?.length ?? 0) > 90 && (
+          <button
+            type="button"
+            onClick={() => setShowFullName((v) => !v)}
+            className="text-sm font-medium text-blue-600 hover:underline"
+          >
+            {showFullName ? "Show less" : "Read more"}
+          </button>
+        )}
         <p className="text-gray-600 mt-1 flex items-center gap-2 flex-wrap">
           {project.clientName}
           {project.certificationType && (
@@ -156,7 +179,7 @@ export default function IndependentProjectDetails() {
           )}
         </p>
         <p className="text-sm text-gray-500 mt-1">
-          Contract: {formatCurrency(project.contractAmount)} · Received: {formatCurrency(project.totalReceived)} · Pending: {formatCurrency(project.totalPending)}
+          Contract: {project.contractAmount ? formatCurrency(project.contractAmount) : "Not set"} · Received: {formatCurrency(project.totalReceived)} · Pending: {formatCurrency(project.totalPending)}
           {project.carriedForwardReceivedAmount > 0 && (
             <> · <span className="text-gray-400">(incl. {formatCurrency(project.carriedForwardReceivedAmount)} carried forward from before CRM)</span></>
           )}
@@ -167,13 +190,18 @@ export default function IndependentProjectDetails() {
         <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-sm">{error}</div>
       )}
 
-      <div className="flex gap-3">
-        {!rows.some((r) => r.invoiceType === "PROFORMA") && (
-          <button onClick={() => setShowPiForm(true)}
-            className="flex items-center gap-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium text-sm">
-            <Plus size={16} /> Create PI
-          </button>
-        )}
+      <div className="flex flex-wrap gap-3">
+        <button onClick={() => setShowEdit(true)}
+          className="flex items-center gap-1 px-4 py-2 border border-gray-300 bg-white text-gray-800 rounded-lg hover:bg-gray-50 font-medium text-sm">
+          <Pencil size={16} /> Edit details
+        </button>
+
+        {/* Always available — the next PI (PI-2, Final …) can be raised
+            after the first one; each has its own payment and TI. */}
+        <button onClick={() => setShowPiForm(true)}
+          className="flex items-center gap-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium text-sm">
+          <Plus size={16} /> {rows.some((r) => r.invoiceType === "PROFORMA") ? "New PI" : "Create PI"}
+        </button>
 
         {rows.some((r) => r.invoiceType === "PROFORMA") && (
           <button onClick={() => setShowTiForm(true)}
@@ -193,7 +221,20 @@ export default function IndependentProjectDetails() {
             No PI raised yet for this record. Use the button above to create it.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Phone / tablet: one card per PI / TI. The table is for laptops. */}
+          <div className="lg:hidden">
+            <InvoiceRowCards
+              rows={rows}
+              generatingTi={generatingTi}
+              onPreview={openPreview}
+              onRecordPayment={(row) => setRecordPaymentFor(row)}
+              onGenerateTi={handleGenerateTi}
+              onLinkTi={(row) => { setLinkingTiFor(row); setLinkTargetPiId(""); }}
+              onViewPayments={(row) => setPaymentsFor(row)}
+            />
+          </div>
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -227,6 +268,12 @@ export default function IndependentProjectDetails() {
                     <td className="px-6 py-4 text-right text-gray-900">{formatCurrency(row.totalAmount)}</td>
                     <td className="px-6 py-4 text-right text-green-700">
                       {row.paidAmount != null ? formatCurrency(row.paidAmount) : "—"}
+                      {row.invoiceType === "PROFORMA" && row.paymentId && (row.paidAmount ?? 0) > 0 && (
+                        <button onClick={() => setPaymentsFor(row)}
+                          className="block ml-auto mt-0.5 text-xs font-medium text-blue-700 hover:text-blue-900 underline">
+                          View payments
+                        </button>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right text-orange-700">
                       {row.dueAmount != null ? formatCurrency(row.dueAmount) : "—"}
@@ -269,8 +316,16 @@ export default function IndependentProjectDetails() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
+
+      <CreateIndependentProjectModal
+        isOpen={showEdit}
+        existing={showEdit ? project : null}
+        onClose={() => setShowEdit(false)}
+        onCreated={() => { setShowEdit(false); refresh(); }}
+      />
 
       <IndependentInvoiceFormModal
         independentProjectId={project.id}
@@ -315,6 +370,16 @@ export default function IndependentProjectDetails() {
             // modal shows the new figure while the row keeps the old one.
             if (independentProjectId) loadData(independentProjectId);
           }}
+        />
+      )}
+
+      {paymentsFor && paymentsFor.paymentId && (
+        <PaymentsReceivedModal
+          paymentId={paymentsFor.paymentId}
+          invoiceNumber={paymentsFor.invoiceNumber}
+          totalAmount={paymentsFor.totalAmount}
+          onClose={() => setPaymentsFor(null)}
+          onChanged={refresh}
         />
       )}
 

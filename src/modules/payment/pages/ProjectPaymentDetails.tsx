@@ -22,7 +22,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { FileText, Plus, ArrowLeft, IndianRupee, Receipt } from "lucide-react";
+import { FileText, Plus, ArrowLeft, IndianRupee, Receipt, Pencil } from "lucide-react";
 import { getProjectById, type ProjectResponse } from "../../../services/projectService";
 import {
   getProjectInvoicesWithPayment,
@@ -35,6 +35,10 @@ import {
 import ProjectInvoiceFormModal from "../../../components/invoice/ProjectInvoiceFormModal";
 import AmcInvoicePreviewModal from "../../../components/invoice/AmcInvoicePreviewModal";
 import AddPaymentTransactionModal from "../components/AddPaymentTransactionModal";
+import PaymentsReceivedModal from "../components/PaymentsReceivedModal";
+import { getApiErrorMessage } from "../../../utils/apiError";
+import InvoiceRowCards from "../../../components/invoice/InvoiceRowCards";
+import EditContractModal from "../components/EditContractModal";
 
 const STATUS_STYLES: Record<string, string> = {
   PENDING: "bg-orange-100 text-orange-800",
@@ -53,17 +57,16 @@ export default function ProjectPaymentDetails() {
   const [error, setError] = useState<string | null>(null);
 
   const [showPiForm, setShowPiForm] = useState(false);
+  const [editContract, setEditContract] = useState(false);
   const [showTiForm, setShowTiForm] = useState(false);
   const [previewInvoice, setPreviewInvoice] = useState<InvoiceDetailsResponse | null>(null);
   const [recordPaymentFor, setRecordPaymentFor] = useState<ProjectInvoicePaymentRow | null>(null);
+  // "Payments received" (date, reference no., edit) for this PI.
+  const [paymentsFor, setPaymentsFor] = useState<ProjectInvoicePaymentRow | null>(null);
   const [generatingTi, setGeneratingTi] = useState<string | null>(null);
   const [linkingTiFor, setLinkingTiFor] = useState<ProjectInvoicePaymentRow | null>(null);
   const [linkTargetPiId, setLinkTargetPiId] = useState<string>("");
   const [linkSubmitting, setLinkSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (projectId) loadData(projectId);
-  }, [projectId]);
 
   const loadData = async (id: string) => {
     setLoading(true);
@@ -76,11 +79,32 @@ export default function ProjectPaymentDetails() {
       setProject(projectDetails);
       setRows(invoiceRows);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load project payment details");
+      setError(getApiErrorMessage(err, "Failed to load project payment details"));
     } finally {
       setLoading(false);
     }
   };
+
+  // First load (refresh() reuses loadData for later reloads).
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    Promise.all([getProjectById(projectId), getProjectInvoicesWithPayment(projectId)])
+      .then(([projectDetails, invoiceRows]) => {
+        if (cancelled) return;
+        setProject(projectDetails);
+        setRows(invoiceRows);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(getApiErrorMessage(err, "Failed to load project payment details"));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   const refresh = () => {
     if (projectId) loadData(projectId);
@@ -91,7 +115,7 @@ export default function ProjectPaymentDetails() {
       const details = await getInvoiceDetailsById(invoiceId);
       setPreviewInvoice(details);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to open invoice");
+      setError(getApiErrorMessage(err, "Failed to open invoice"));
     }
   };
 
@@ -119,7 +143,7 @@ export default function ProjectPaymentDetails() {
       setLinkTargetPiId("");
       refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to link TI to PI");
+      setError(getApiErrorMessage(err, "Failed to link TI to PI"));
     } finally {
       setLinkSubmitting(false);
     }
@@ -155,7 +179,7 @@ export default function ProjectPaymentDetails() {
   if (!project) return null;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-0 lg:p-6 space-y-4 lg:space-y-6">
       <div>
         <button onClick={() => navigate("/projects")} className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium mb-2">
           <ArrowLeft size={16} /> Back to Projects
@@ -173,7 +197,15 @@ export default function ProjectPaymentDetails() {
           )}
         </p>
         <p className="text-sm text-gray-500 mt-1">
-          Total: {formatCurrency(project.amount)} · Received: {formatCurrency(project.receivedAmount)} · Pending: {formatCurrency(project.pendingAmount)}
+          Contract: {formatCurrency(project.amount)}
+          <button
+            type="button"
+            onClick={() => setEditContract(true)}
+            className="mx-1 inline-flex items-center gap-0.5 text-indigo-700 hover:underline font-medium"
+          >
+            <Pencil size={12} /> Edit
+          </button>
+          · Received: {formatCurrency(project.receivedAmount)} · Pending: {formatCurrency(project.pendingAmount)}
           {project.overdueAmount > 0 && <> · <span className="text-red-600 font-medium">Overdue: {formatCurrency(project.overdueAmount)}</span></>}
         </p>
       </div>
@@ -183,12 +215,14 @@ export default function ProjectPaymentDetails() {
       )}
 
       <div className="flex gap-3">
-        {!rows.some((r) => r.invoiceType === "PROFORMA") && (
-          <button onClick={() => setShowPiForm(true)}
-            className="flex items-center gap-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium text-sm">
-            <Plus size={16} /> Create PI
-          </button>
-        )}
+        {/* Always available: a project is billed in stages (Advance PI-1,
+            PI-2 …, Sample Testing, Final), each with its own payment and TI.
+            Used to show only until the first PI existed, so PI-2 / Final
+            could never be raised. */}
+        <button onClick={() => setShowPiForm(true)}
+          className="flex items-center gap-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium text-sm">
+          <Plus size={16} /> {rows.some((r) => r.invoiceType === "PROFORMA") ? "New PI" : "Create PI"}
+        </button>
 
         {/* Manual fallback — the "Generate TI →" button on the PI row only
             appears once the payment status auto-detects as PAID. If that's
@@ -213,7 +247,20 @@ export default function ProjectPaymentDetails() {
             No PI raised yet for this project. Use the button above to create it.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Phone / tablet: one card per PI / TI. The table is for laptops. */}
+          <div className="lg:hidden">
+            <InvoiceRowCards
+              rows={rows}
+              generatingTi={generatingTi}
+              onPreview={openPreview}
+              onRecordPayment={(row) => setRecordPaymentFor(row)}
+              onGenerateTi={handleGenerateTi}
+              onLinkTi={(row) => { setLinkingTiFor(row); setLinkTargetPiId(""); }}
+              onViewPayments={(row) => setPaymentsFor(row)}
+            />
+          </div>
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -247,6 +294,12 @@ export default function ProjectPaymentDetails() {
                     <td className="px-6 py-4 text-right text-gray-900">{formatCurrency(row.totalAmount)}</td>
                     <td className="px-6 py-4 text-right text-green-700">
                       {row.paidAmount != null ? formatCurrency(row.paidAmount) : "—"}
+                      {row.invoiceType === "PROFORMA" && row.paymentId && (row.paidAmount ?? 0) > 0 && (
+                        <button onClick={() => setPaymentsFor(row)}
+                          className="block ml-auto mt-0.5 text-xs font-medium text-blue-700 hover:text-blue-900 underline">
+                          View payments
+                        </button>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right text-orange-700">
                       {row.dueAmount != null ? formatCurrency(row.dueAmount) : "—"}
@@ -289,6 +342,7 @@ export default function ProjectPaymentDetails() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
@@ -313,6 +367,16 @@ export default function ProjectPaymentDetails() {
           invoice={previewInvoice}
           onClose={() => { setPreviewInvoice(null); refresh(); }}
           onUpdated={(updated) => setPreviewInvoice(updated)}
+        />
+      )}
+
+      {paymentsFor && paymentsFor.paymentId && (
+        <PaymentsReceivedModal
+          paymentId={paymentsFor.paymentId}
+          invoiceNumber={paymentsFor.invoiceNumber}
+          totalAmount={paymentsFor.totalAmount}
+          onClose={() => setPaymentsFor(null)}
+          onChanged={refresh}
         />
       )}
 
@@ -366,6 +430,21 @@ export default function ProjectPaymentDetails() {
             </div>
           </div>
         </div>
+      )}
+      {editContract && (
+        <EditContractModal
+          projectId={project.id}
+          projectName={project.projectName}
+          currentAmount={project.amount}
+          billedSoFar={rows
+            .filter((r) => r.invoiceType === "PROFORMA")
+            .reduce((sum, r) => sum + Number(r.totalAmount || 0), 0)}
+          onClose={() => setEditContract(false)}
+          onSaved={() => {
+            setEditContract(false);
+            refresh();
+          }}
+        />
       )}
     </div>
   );

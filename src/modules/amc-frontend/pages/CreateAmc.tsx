@@ -174,7 +174,7 @@ export default function CreateAmc() {
   };
 
   return (
-    <div className="p-2 sm:p-6 bg-gray-50 min-h-screen max-w-4xl mx-auto">
+    <div className="p-0 lg:p-6 bg-gray-50 min-h-screen max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Create New AMC</h1>

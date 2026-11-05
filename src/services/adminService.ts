@@ -53,6 +53,11 @@ export interface ActivityLogEntry {
   action: string;
   module: string;
   timestamp: string;
+  // What the action was done on — lets the row name it and open it.
+  entityType?: string | null;   // "LEAD" | "PROJECT" | "USER" | ...
+  entityId?: string | null;
+  entityName?: string | null;   // null when the lead/project no longer exists
+  detail?: string | null;       // e.g. "NEGOTIATION → PI RAISED"
 }
 
 // Filter params the Admin Panel's Activity Log tab sends to the backend.

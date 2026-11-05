@@ -1,16 +1,19 @@
 // src/components/invoice/AmcInvoicePreviewModal.tsx
 
 import { useState } from "react";
-import { X, Download, Pencil, Save, Send, Loader2 } from "lucide-react";
+import { X, Download, Pencil, Save, Send, Loader2, Plus, Trash2 } from "lucide-react";
 import ProformaInvoice from "./ProformaInvoice";
+import { GST_STATES, resolveClientState } from "../../utils/gstStates";
 import { downloadElementAsPdf } from "../../utils/downloadInvoice";
 import {
   updateAmcInvoiceDetails,
   markInvoiceAsSent,
   type InvoiceDetailsResponse,
   type InvoiceItemResponse,
+  TDS_OPTIONS,
 } from "../../services/invoiceService";
 import { SIGNATORIES } from "../../config/signatories";
+import NonTaxableFields, { type NonTaxableValue } from "./NonTaxableFields";
 import {
   DEFAULT_GST_RATE,
   detectTaxType,
@@ -55,10 +58,24 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
 
   const [clientName, setClientName] = useState(invoice.clientName);
   const [invoiceNumber, setInvoiceNumber] = useState(invoice.invoiceNumber);
+  // Accounts can back-date / correct the invoice date and set the client's
+  // state (Place of Supply), which decides IGST vs CGST+SGST and is printed
+  // as State Name / State Code.
+  const [issueDate, setIssueDate] = useState(invoice.issueDate ?? "");
+  const [placeOfSupply, setPlaceOfSupply] = useState(
+    invoice.placeOfSupply || resolveClientState(null, invoice.clientGst).name || ""
+  );
   const [clientGst, setClientGst] = useState(invoice.clientGst);
   const [billingAddress, setBillingAddress] = useState(invoice.billingAddress);
   const [remarks, setRemarks] = useState(invoice.remarks || "");
   const [signatoryName, setSignatoryName] = useState(invoice.signatoryName || "");
+  // TDS — TI only (NIL / 2 / 10 %).
+  const [tdsRate, setTdsRate] = useState<number>(Number(invoice.tdsRate ?? 0));
+  // Billed without GST (government fee, engineer expenses …) — added after GST.
+  const [nonTaxable, setNonTaxable] = useState<NonTaxableValue>({
+    amount: Number(invoice.nonTaxableAmount ?? 0),
+    label: invoice.nonTaxableLabel ?? "",
+  });
   const [items, setItems] = useState<EditableItem[]>(
     invoice.items.map((it) => ({ ...it, _key: it.id }))
   );
@@ -73,8 +90,13 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
   //
   // The saved invoice's own taxType is trusted first; only when it's
   // missing (legacy rows) do we fall back to detecting from the GSTIN.
+  // If accounts change the client's state, the split follows the new state.
+  const stateChanged = (placeOfSupply || "") !== (invoice.placeOfSupply || "");
   const effectiveTaxType: TaxType =
-    invoice.taxType ?? detectTaxType(invoice.placeOfSupply, clientGst);
+    stateChanged && placeOfSupply
+      ? detectTaxType(placeOfSupply, null)
+      : invoice.taxType ?? detectTaxType(invoice.placeOfSupply, clientGst);
+  const clientState = resolveClientState(placeOfSupply, clientGst);
 
   const tax = calculateTaxBreakdown(
     taxableAmount,
@@ -83,7 +105,7 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
   );
 
   const taxAmount = tax.taxAmount;
-  const totalAmount = tax.totalAmount;
+  const totalAmount = tax.totalAmount + (nonTaxable.amount || 0);
 
   const handleItemChange = (key: string, field: keyof InvoiceItemResponse, value: string | number) => {
     setItems((prev) =>
@@ -98,17 +120,49 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
     );
   };
 
+  // Edit can add a line that was missed, or drop one — not only change
+  // the existing ones. The save sends the whole list, so the server
+  // replaces the invoice's items with exactly what is shown here.
+  const handleAddItem = () => {
+    setItems((prev) => [
+      ...prev,
+      {
+        id: "",
+        _key: `new-${Date.now()}-${prev.length}`,
+        description: "",
+        // Most invoices carry one SAC for every line — start from it.
+        sacCode: prev[0]?.sacCode ?? "",
+        quantity: 1,
+        unitPrice: 0,
+        amount: 0,
+      } as EditableItem,
+    ]);
+  };
+
+  const handleRemoveItem = (key: string) => {
+    setItems((prev) => (prev.length > 1 ? prev.filter((it) => it._key !== key) : prev));
+  };
+
   const handleSave = async () => {
+    if (items.some((it) => !it.description.trim() || !(Number(it.unitPrice) > 0))) {
+      setError("Every item needs a description and a unit price above 0. Remove empty rows before saving.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const updated = await updateAmcInvoiceDetails(invoice.id, {
         invoiceNumber: invoiceNumber.trim() || undefined,
+        issueDate: issueDate || undefined,
+        placeOfSupply: placeOfSupply || undefined,
         clientName,
         clientGst,
         billingAddress,
         remarks,
         signatoryName: signatoryName || undefined,
+        tdsRate: isTax ? tdsRate : undefined,
+        nonTaxableAmount: nonTaxable.amount || 0,
+        nonTaxableLabel: nonTaxable.label.trim(),
         taxableAmount,
         taxAmount,
         totalAmount,
@@ -153,10 +207,10 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[95vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white sm:rounded-lg shadow-xl max-w-5xl w-full h-full sm:h-auto max-h-full sm:max-h-[95vh] overflow-y-auto">
         {/* Header */}
-        <div className={`sticky top-0 z-10 text-white p-4 flex justify-between items-center ${isTax ? "bg-blue-700" : "bg-orange-600"}`}>
+        <div className={`sticky top-0 z-10 text-white p-3 sm:p-4 flex flex-wrap gap-2 justify-between items-center ${isTax ? "bg-blue-700" : "bg-orange-600"}`}>
           <div>
             <h2 className="text-xl font-bold">{invoice.invoiceNumber}</h2>
             <p className="text-sm opacity-90">
@@ -164,7 +218,7 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
               {invoice.referenceType === "AMC" ? " · AMC" : " · Project"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {!editMode && (
               <button onClick={() => setEditMode(true)}
                 className="flex items-center gap-1 px-3 py-1.5 bg-white bg-opacity-20 rounded hover:bg-opacity-30 text-sm font-medium">
@@ -199,8 +253,8 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
 
         {!isDraft && !editMode && (
           <div className="bg-amber-50 border-b border-amber-200 text-amber-800 p-3 text-sm">
-            ⚠️ This invoice has already been sent. Its invoice number ({invoice.invoiceNumber}) stays the same —
-            edit and re-download to correct a mistake without creating a new PI/TI.
+            ⚠️ This invoice has already been sent. Use <b>Edit</b> to correct the number, date, client state or
+            amounts, then re-download — no new PI/TI is created.
           </div>
         )}
 
@@ -214,6 +268,28 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
               <input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
               <p className="text-xs text-gray-500 mt-1">Must stay unique across all invoices.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date</label>
+                <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Client State (Place of Supply)
+                </label>
+                <select value={placeOfSupply} onChange={(e) => setPlaceOfSupply(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white">
+                  <option value="">— Take from GST number —</option>
+                  {GST_STATES.map((st) => (
+                    <option key={st.code} value={st.name}>{st.name} ({st.code})</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Uttar Pradesh = CGST + SGST; any other state = IGST.
+                </p>
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -233,6 +309,13 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
               </div>
             </div>
 
+            <div className="flex justify-between items-center">
+              <span className="text-sm font-medium text-gray-700">Items</span>
+              <button type="button" onClick={handleAddItem}
+                className="flex items-center gap-1.5 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700">
+                <Plus size={16} /> Add Item
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm border border-gray-300 rounded-lg overflow-hidden bg-white">
                 <thead className="bg-gray-100">
@@ -241,7 +324,8 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
                     <th className="border-b border-r px-3 py-2 text-left">SAC</th>
                     <th className="border-b border-r px-3 py-2 text-center w-20">Qty</th>
                     <th className="border-b border-r px-3 py-2 text-right w-28">Unit Price</th>
-                    <th className="border-b px-3 py-2 text-right w-28">Amount</th>
+                    <th className="border-b border-r px-3 py-2 text-right w-28">Amount</th>
+                    <th className="border-b px-3 py-2 text-center w-12"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -265,12 +349,21 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
                           onChange={(e) => handleItemChange(it._key, "unitPrice", parseFloat(e.target.value) || 0)}
                           className="w-full px-2 py-1 border border-gray-300 rounded text-right" />
                       </td>
-                      <td className="px-3 py-2 text-right font-medium">₹{it.amount.toLocaleString()}</td>
+                      <td className="border-r px-3 py-2 text-right font-medium">₹{it.amount.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-center">
+                        <button type="button" title="Remove item" onClick={() => handleRemoveItem(it._key)}
+                          disabled={items.length === 1}
+                          className="text-red-600 hover:text-red-800 disabled:text-gray-300">
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            <NonTaxableFields value={nonTaxable} onChange={setNonTaxable} />
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
@@ -288,35 +381,61 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
                 ))}
               </select>
             </div>
+
+            {isTax && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">TDS</label>
+                <select value={tdsRate} onChange={(e) => setTdsRate(Number(e.target.value))}
+                  className="w-full md:w-40 px-3 py-2 border border-gray-300 rounded-lg">
+                  {TDS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Worked out on the taxable value and printed as "Amount after TDS". Not shown on a PI.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
         {/* The actual visual invoice — what gets captured for the PDF.
             Uses the same ProformaInvoice component (and prop shape) as the
             Deal PI/TI flow, so AMC invoices render pixel-identical. */}
-        <div className="p-4 bg-gray-200 flex justify-center overflow-x-auto">
+        <div className="p-2 sm:p-4 bg-gray-200 flex justify-start lg:justify-center overflow-x-auto">
           <div id={elementId} style={{ width: "210mm" }}>
             <ProformaInvoice
               invoiceNo={invoiceNumber}
-              invoiceDate={invoice.issueDate}
+              invoiceDate={issueDate || invoice.issueDate}
               invoiceType={invoice.invoiceType}
               signatoryName={signatoryName}
+              sourcePiNumber={invoice.sourcePiNumber}
+              sourcePiDate={invoice.sourcePiDate}
+              tdsRate={isTax ? tdsRate : 0}
+              tdsAmount={isTax && tdsRate === Number(invoice.tdsRate ?? 0) && taxableAmount === Number(invoice.taxableAmount ?? 0)
+                ? invoice.tdsAmount
+                : null}
               customer={{
                 companyName: clientName,
                 address: billingAddress,
                 gstNo: clientGst,
                 reference: remarks,
+                stateName: clientState.name,
+                stateCode: clientState.code,
               }}
-              seller={SELLER}
+              seller={{ ...SELLER, stateName: "Uttar Pradesh", stateCode: "09" }}
               items={items.map((it) => ({
                 id: it.id,
                 description: it.description,
                 hsnSac: it.sacCode,
                 amount: it.amount,
+                quantity: it.quantity,
+                unitPrice: it.unitPrice,
               }))}
               bank={BANK}
               tax={{
-                nonTaxableAmount: 0,
+                nonTaxableAmount: nonTaxable.amount || 0,
+                nonTaxableLabel: nonTaxable.label,
                 taxableAmount,
                 cgst: tax.cgstAmount,
                 sgst: tax.sgstAmount,
@@ -327,6 +446,8 @@ export default function AmcInvoicePreviewModal({ invoice, onClose, onUpdated }: 
                 sgstRate: tax.sgstRate,
                 igstRate: tax.igstRate,
               }}
+              payments={invoice.payments ?? []}
+              receivedAmount={invoice.receivedAmount ?? 0}
             />
           </div>
         </div>

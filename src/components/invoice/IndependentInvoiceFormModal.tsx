@@ -19,6 +19,7 @@ import {
   type InvoiceDetailsResponse,
   type ProjectInvoicePaymentRow,
 } from "../../services/invoiceService";
+import { PI_STAGE_OPTIONS, TDS_OPTIONS, type PiStage } from "../../services/invoiceService";
 import { SIGNATORIES } from "../../config/signatories";
 import {
   DEFAULT_GST_RATE,
@@ -27,6 +28,11 @@ import {
   formatRate,
   type TaxType,
 } from "../../constants/taxConstants";
+import NonTaxableFields, { type NonTaxableValue } from "./NonTaxableFields";
+
+// Today's date in India (yyyy-MM-dd) — the default invoice date.
+const todayIst = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 
 interface IndependentInvoiceFormModalProps {
   independentProjectId: string;
@@ -85,6 +91,11 @@ export default function IndependentInvoiceFormModal({
   // shows real payment status (mirrored) instead of dashes.
   const [piOptions, setPiOptions] = useState<ProjectInvoicePaymentRow[]>([]);
   const [selectedPiId, setSelectedPiId] = useState<string>("");
+  // PI type (decides PI-1 / PI-ST / PI-F) and TDS on a TI.
+  const [piStage, setPiStage] = useState<PiStage>("ADVANCE");
+  const [tdsRate, setTdsRate] = useState<number>(0);
+  // Billed without GST (government fee, engineer expenses …) — added after GST.
+  const [nonTaxable, setNonTaxable] = useState<NonTaxableValue>({ amount: 0, label: "" });
 
   useEffect(() => {
     if (isOpen && invoiceType === "TAX" && independentProjectId) {
@@ -97,6 +108,7 @@ export default function IndependentInvoiceFormModal({
 
   const [formData, setFormData] = useState({
     invoiceNumber: "",
+    issueDate: todayIst(),
     clientName: prefillClientName || "",
     clientEmail: prefillClientEmail || "",
     clientGst: prefillClientGst || "",
@@ -176,7 +188,7 @@ export default function IndependentInvoiceFormModal({
 
   const tax = calculateTaxBreakdown(taxableAmount, effectiveTaxType, DEFAULT_GST_RATE);
   const taxAmount = tax.taxAmount;
-  const totalAmount = tax.totalAmount;
+  const totalAmount = tax.totalAmount + (nonTaxable.amount || 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,11 +218,15 @@ export default function IndependentInvoiceFormModal({
         totalAmount,
         gstRate: DEFAULT_GST_RATE,
         taxType: effectiveTaxType,
-        issueDate: new Date().toISOString().split("T")[0],
+        issueDate: formData.issueDate || todayIst(),
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
         remarks: formData.remarks,
         signatoryName: formData.signatoryName || undefined,
         sourcePiId: invoiceType === "TAX" && selectedPiId ? selectedPiId : undefined,
+        piStage: invoiceType === "PROFORMA" ? piStage : undefined,
+        tdsRate: invoiceType === "TAX" ? tdsRate : undefined,
+        nonTaxableAmount: nonTaxable.amount || 0,
+        nonTaxableLabel: nonTaxable.label.trim() || undefined,
         items: lineItems.map((item) => ({
           description: item.description,
           sacCode: item.sacCode,
@@ -232,8 +248,8 @@ export default function IndependentInvoiceFormModal({
     : { from: "from-blue-600", to: "to-blue-700", ring: "focus:ring-blue-500", btn: "bg-blue-600 hover:bg-blue-700" };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[95vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white sm:rounded-lg shadow-xl max-w-4xl w-full h-full sm:h-auto max-h-full sm:max-h-[95vh] overflow-y-auto">
         <div className={`sticky top-0 bg-gradient-to-r ${theme.from} ${theme.to} text-white p-6 flex justify-between items-center`}>
           <h2 className="text-2xl font-bold">
             Create {invoiceType === "PROFORMA" ? "Proforma Invoice" : "Tax Invoice"} — Independent Record
@@ -244,7 +260,7 @@ export default function IndependentInvoiceFormModal({
         </div>
 
         <div className="bg-amber-50 border-b border-amber-200 px-6 py-2 text-sm text-amber-900">
-          ℹ️ Contract value: <strong>₹{(contractAmount || 0).toLocaleString()}</strong>
+          ℹ️ Contract value: <strong>{contractAmount ? `₹${contractAmount.toLocaleString()}` : "not set"}</strong>
           {" · "}already received: <strong>₹{(totalReceived || 0).toLocaleString()}</strong>
           {" · "}still open: <strong>₹{(totalPending || 0).toLocaleString()}</strong> — enter only
           the amount you're billing <em>in this specific invoice</em> below (usually the still-open balance,
@@ -286,37 +302,81 @@ export default function IndependentInvoiceFormModal({
               {invoiceType === "PROFORMA" ? "PI No." : "TI No."} (Optional)
             </label>
             <input type="text" name="invoiceNumber" value={formData.invoiceNumber} onChange={handleInputChange}
-              placeholder={invoiceType === "PROFORMA" ? "e.g. PI-2026-0048" : "e.g. TI-2026-0048"}
+              placeholder={invoiceType === "PROFORMA" ? "e.g. PI-1/26-27/622" : "e.g. 2442"}
               className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`} />
             <p className="text-xs text-gray-500 mt-1">
               Leave blank to auto-generate the next number. Type your own to override it — useful for legacy
               work that already went out on a manually numbered invoice.
             </p>
           </div>
+          <div className="border-b pb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date</label>
+            <input type="date" name="issueDate" value={formData.issueDate} onChange={handleInputChange}
+              required className={`w-full md:w-60 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`} />
+            <p className="text-xs text-gray-500 mt-1">
+              Today by default. Change it to put an earlier or later date on the {invoiceType === "PROFORMA" ? "PI" : "TI"}.
+            </p>
+          </div>
+
+          {/* PI: which PI this is → number PI-1 / PI-ST / PI-F …/FY/quotation no.
+              TI: TDS the client deducts (printed as "Amount after TDS"; never on a PI). */}
+          {invoiceType === "PROFORMA" ? (
+            <div className="border-b pb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">PI Type</label>
+              <select value={piStage} onChange={(e) => setPiStage(e.target.value as PiStage)}
+                className={`w-full md:w-72 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`}>
+                {PI_STAGE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Auto number looks like PI-1/26-27/622 (Advance), PI-ST/26-27/622 or PI-F/26-27/622 —
+                26-27 is the financial year, 622 the client's quotation number.
+              </p>
+            </div>
+          ) : (
+            <div className="border-b pb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">TDS</label>
+              <select value={tdsRate} onChange={(e) => setTdsRate(Number(e.target.value))}
+                className={`w-full md:w-40 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`}>
+                {TDS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              {tdsRate > 0 && (
+                <p className="text-xs text-gray-600 mt-1">
+                  TDS @{tdsRate}% on ₹{taxableAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })} = ₹
+                  {(Math.round(taxableAmount * tdsRate) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })} ·
+                  Amount after TDS ₹
+                  {(Math.round((totalAmount - taxableAmount * tdsRate / 100) * 100) / 100).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="border-b pb-4">
             <h3 className="font-semibold text-gray-700 mb-3">Client Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
                 <input type="text" name="clientName" value={formData.clientName} onChange={handleInputChange}
-                  required className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
-                <input type="email" name="clientEmail" value={formData.clientEmail} onChange={handleInputChange}
-                  required className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">GST Number *</label>
-                <input type="text" name="clientGst" value={formData.clientGst} onChange={handleInputChange}
-                  placeholder="e.g. 07AHNPJ2190E1ZE" required
                   className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Billing Address *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input type="text" inputMode="email" name="clientEmail" value={formData.clientEmail} onChange={handleInputChange}
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">GST Number</label>
+                <input type="text" name="clientGst" value={formData.clientGst} onChange={handleInputChange}
+                  placeholder="e.g. 07AHNPJ2190E1ZE"
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Billing Address</label>
                 <input type="text" name="billingAddress" value={formData.billingAddress} onChange={handleInputChange}
-                  required className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`} />
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 ${theme.ring}`} />
               </div>
             </div>
           </div>
@@ -345,9 +405,14 @@ export default function IndependentInvoiceFormModal({
                   {lineItems.map((item) => (
                     <tr key={item.id} className="border-b hover:bg-gray-50">
                       <td className="border-r px-3 py-2">
-                        <input type="text" value={item.description}
+                        {/* A textarea, not an input: item descriptions are
+                            often a numbered list of products, and a single-line
+                            input has no way to enter a line break at all.
+                            Enter adds a line; the invoice prints it as typed. */}
+                        <textarea value={item.description}
+                          rows={2}
                           onChange={(e) => handleLineItemChange(item.id, "description", e.target.value)}
-                          required className="w-full px-2 py-1 border border-gray-300 rounded" />
+                          required className="w-full px-2 py-1 border border-gray-300 rounded resize-y" />
                       </td>
                       <td className="border-r px-3 py-2">
                         <input type="text" value={item.sacCode}
@@ -409,6 +474,7 @@ export default function IndependentInvoiceFormModal({
                 supply differs from the GSTIN state.
               </p>
             </div>
+            <NonTaxableFields value={nonTaxable} onChange={setNonTaxable} ringClass={theme.ring} />
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                 <p className="text-sm text-gray-600 mb-1">Taxable Amount</p>

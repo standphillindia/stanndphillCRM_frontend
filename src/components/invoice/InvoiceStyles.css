@@ -7,7 +7,14 @@
 .pi-page {
   position: relative;
   width: 210mm;
-    height: 297mm;
+  /* At least one A4 page, but grows with the content. A fixed 297mm
+     height clipped long invoices (TDS rows + HSN/SAC summary) and the
+     footer, pinned to the page bottom, printed on top of the summary
+     table. The footer now follows the content (see .pi-footer). */
+  min-height: 297mm;
+  height: auto;
+  display: flex;
+  flex-direction: column;
   margin: 0 auto;
   background: #ffffff;
   box-sizing: border-box;
@@ -405,10 +412,13 @@
    FOOTER
 ====================================================== */
 .pi-footer{
-    position:absolute;
-    left:12mm;
-    right:12mm;
-    bottom:32px;
+    /* In the normal flow, pushed to the bottom of the page by
+       margin-top:auto — so on a short invoice it sits exactly where it
+       used to (32px above the page edge), and on a long one it moves
+       down below the last table instead of overlapping it. */
+    position:relative;
+    margin-top:auto;
+    margin-bottom:calc(32px - 22mm);
 }
 .pi-footer-text {
     position:relative;
@@ -536,3 +546,56 @@
     left: 0;
   }
 }
+
+/* ── Part-paid PI: received / balance (ProformaInvoice) ─────────── */
+.pi-reminder-wrap {
+  text-align: center;
+  margin: -6px 0 10px;
+}
+.pi-reminder-tag {
+  display: inline-block;
+  border: 1.5px solid #c2410c;
+  color: #c2410c;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  padding: 3px 12px;
+  border-radius: 4px;
+}
+.pi-payment-lines {
+  font-size: 0.82em;
+  color: #555;
+  margin-top: 2px;
+}
+.pi-balance-due td {
+  background: #fff1e6;
+}
+.pi-balance-due td.pi-right {
+  color: #c2410c;
+}
+.pi-balance-paid td {
+  background: #e8f6ec;
+}
+.pi-balance-paid td.pi-right {
+  color: #137333;
+}
+
+/* ── Qty / Rate columns (only when a line has quantity > 1) ─────── */
+.pi-center {
+  text-align: center;
+}
+.pi-col-qty,
+.pi-col-rate {
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.pi-item-qty,
+.pi-item-rate {
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+/* Five columns: narrow the description / HSN / amount columns to fit. */
+.pi-items-qty .pi-col-desc { width: 44%; }
+.pi-items-qty .pi-col-hsn { width: 13%; }
+.pi-items-qty .pi-col-amount { width: 20%; }

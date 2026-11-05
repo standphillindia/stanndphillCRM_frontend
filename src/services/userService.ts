@@ -42,6 +42,7 @@ export interface UserResponse {
   status: UserStatus;
   createdAt: string;
   lastLoginAt?: string | null;
+  lastSeenAt?: string | null;   // last time the CRM was open in their browser
 }
 
 export interface CreateUserRequest {
@@ -177,6 +178,10 @@ interface BackendUserResponse {
   departmentName?: string;
   createdAt: string;
   updatedAt?: string;
+  // Login presence (backend UserPresence): true = logged in right now.
+  online?: boolean | null;
+  lastLoginAt?: string | null;
+  lastSeenAt?: string | null;
 }
 
 const mapBackendUser = (u: BackendUserResponse): UserResponse => ({
@@ -187,12 +192,47 @@ const mapBackendUser = (u: BackendUserResponse): UserResponse => ({
   role: (u.roleName as UserRole) ?? "OPERATIONS",
   team: u.teamName,
   department: u.departmentName,
-  status: u.active ? "ACTIVE" : "INVITED",
+  // INVITED = account not approved yet. Approved accounts show ACTIVE
+  // while the person is logged in and INACTIVE once they sign out, close
+  // the CRM, or their 9-hour login runs out.
+  status: !u.active ? "INVITED" : u.online ? "ACTIVE" : "INACTIVE",
   createdAt: u.createdAt,
-  lastLoginAt: null,
+  lastLoginAt: u.lastLoginAt ?? null,
+  lastSeenAt: u.lastSeenAt ?? null,
 });
 
 const delay = (ms = 400) => new Promise((res) => setTimeout(res, ms));
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/org/setup/users  →  name list for dropdowns
+// ─────────────────────────────────────────────────────────────
+// For pickers (engineer, Ops person, sales owner) on screens that people
+// without Users-module access also use — e.g. Operations adding a project.
+// Returns only id, name, email, role, department and active.
+interface BackendUserLite {
+  id: string;
+  fullName: string;
+  email: string;
+  roleName?: string | null;
+  departmentName?: string | null;
+  active?: boolean | null;
+}
+
+export const fetchUserDirectory = async (): Promise<UserResponse[]> => {
+  const res = await api.get<BackendUserLite[]>("/org/setup/users");
+  return res.data
+    .map((u) => ({
+      id: u.id,
+      fullName: u.fullName,
+      email: u.email,
+      role: (u.roleName as UserRole) ?? "OPERATIONS",
+      department: u.departmentName ?? undefined,
+      status: (u.active ? "ACTIVE" : "INVITED") as UserStatus,
+      createdAt: "",
+      lastLoginAt: null,
+    }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+};
 
 // ─────────────────────────────────────────────────────────────
 // GET /api/users  →  fetch all users (optionally filtered)

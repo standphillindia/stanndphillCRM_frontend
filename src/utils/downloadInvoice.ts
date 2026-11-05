@@ -19,12 +19,14 @@ import jsPDF from "jspdf";
 const OVERFLOW_TOLERANCE_MM = 4;
 
 /**
- * If the capture is only marginally taller than one A4 page, shrink it to fit
- * rather than splitting it. An invoice that runs 3-8% over is a layout
- * rounding artefact — nobody wants a second page holding two lines of footer.
- * Beyond this the content is genuinely long and gets paginated properly.
+ * If the capture is only somewhat taller than one A4 page, shrink it to fit
+ * rather than splitting it — nobody wants a second page holding two lines of
+ * footer. A Tax Invoice with TDS rows, the PI reference and the HSN/SAC tax
+ * summary runs roughly 10-20% over one page; shrinking it by that much still
+ * prints clearly. Beyond this the content is genuinely long (many line items)
+ * and gets paginated properly.
  */
-const FIT_TO_ONE_PAGE_THRESHOLD = 1.08;
+const FIT_TO_ONE_PAGE_THRESHOLD = 1.25;
 
 export async function downloadElementAsPdf(
   elementId: string,

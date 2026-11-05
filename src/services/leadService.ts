@@ -29,6 +29,35 @@ export interface LeadResponse {
   tiAccessLocked: boolean;
   tiReauthorizationRequestReason: string | null;
   tiReauthorizationRequestedAt: string | null;
+  /** Why the follow-up is set — shown on the call list. */
+  followUpRemark?: string | null;
+  followUpUpdatedAt?: string | null;
+  followUpUpdatedBy?: string | null;
+  /** The Remarks column — a general hand-written note, kept at every status. */
+  remarks?: string | null;
+  remarksUpdatedAt?: string | null;
+  remarksUpdatedBy?: string | null;
+  /**
+   * Page the website enquiry came from — the website admin's Link column.
+   * Marketing reads it before calling: the page says which service the
+   * client was looking at.
+   */
+  sourcePage?: string | null;
+  /** Why the lead was lost — one of the fixed reasons. */
+  lostReason?: string | null;
+  lostAt?: string | null;
+  /**
+   * Day the enquiry was received (yyyy-MM-dd, India date) — may be earlier
+   * than createdAt, e.g. a Meta Ads lead from last night entered today.
+   */
+  leadDate?: string | null;
+  /**
+   * Only on the reply to "add lead": true when this phone number already
+   * had a lead in the last 24 hours, so no new lead was made — the details
+   * went into that lead. ownerName = who that lead is assigned to.
+   */
+  alreadyExisted?: boolean;
+  ownerName?: string | null;
 }
 
 export interface CreateLeadRequest {
@@ -44,6 +73,10 @@ export interface CreateLeadRequest {
   // Only send this when an admin/user explicitly picks a sales person.
   assignedToEmail?: string;
   nextFollowUpDate?: string | null;
+  /** Page the enquiry came from. Sent by the website form. */
+  sourcePage?: string;
+  /** Day the enquiry was received (yyyy-MM-dd). Blank = today. */
+  leadDate?: string;
 }
 
 export interface UpdateLeadRequest {
@@ -56,6 +89,9 @@ export interface UpdateLeadRequest {
   source?: string;
   nextFollowUpDate?: string | null;
   assignedToEmail?: string;
+  sourcePage?: string;
+  /** Corrects the day the enquiry was received (yyyy-MM-dd). */
+  leadDate?: string;
 }
 
 export interface LeadFilterParams {
@@ -119,6 +155,20 @@ function normalizePage<T>(data: SpringPagedModel<T>): {
 }
 
 // GET /api/leads/filter
+/**
+ * Quotations linked to each lead, for the Leads table's Quotations column.
+ * GET /api/leads/quotation-counts?ids=… — leads with none are omitted.
+ */
+export const fetchLeadQuotationCounts = async (
+  leadIds: string[]
+): Promise<Record<string, number>> => {
+  if (leadIds.length === 0) return {};
+  const res = await api.get<Record<string, number>>("/leads/quotation-counts", {
+    params: { ids: leadIds.join(",") },
+  });
+  return res.data ?? {};
+};
+
 export const fetchLeads = async (
   params: LeadFilterParams = {}
 ): Promise<PagedLeads> => {
@@ -234,6 +284,13 @@ export const transitionLead = async (
     // no owner yet. The popup asks the employee for their own email —
     // that's who the lead gets assigned to.
     assignedToEmail?: string;
+    /**
+     * What was discussed. Required on every stage from Contacted to PI
+     * Raised, and on Lost.
+     */
+    remark?: string;
+    /** One of the fixed Lost reasons. Required when targetStatus is LOST. */
+    lostReason?: string;
   }
 ): Promise<LeadResponse> => {
   const res = await api.patch<LeadResponse>(
@@ -241,6 +298,90 @@ export const transitionLead = async (
     data
   );
 
+  return res.data;
+};
+
+/**
+ * GET /api/leads/lost-reasons
+ *
+ * The list behind the Lost dropdown. Served by the backend so the options
+ * and the validation can't drift apart.
+ */
+export const fetchLostReasons = async (): Promise<string[]> => {
+  const res = await api.get<string[]>("/leads/lost-reasons");
+  return res.data;
+};
+
+/**
+ * GET /api/leads/follow-ups
+ *
+ * The call list — leads whose follow-up date has arrived or already passed,
+ * oldest first. Deliberately not built from the paginated `fetchLeads`
+ * result: that only holds the current page, so anyone due on page 2 would
+ * never be called.
+ *
+ * Backend scopes it by role — SALES gets their own, everyone else gets all.
+ */
+export const fetchFollowUpLeads = async (
+  /** Admin only — narrows the list to one salesperson. Ignored for others. */
+  assignedToEmail?: string
+): Promise<LeadResponse[]> => {
+  const res = await api.get<LeadResponse[]>("/leads/follow-ups", {
+    params: assignedToEmail ? { assignedToEmail } : undefined,
+  });
+  return res.data;
+};
+
+/**
+ * PATCH /api/leads/{id}/remark
+ *
+ * Sets or clears the lead's general remark — the Remarks column. Separate
+ * from the follow-up remark: that one explains a scheduled call and goes
+ * when the follow-up is cleared; this one stays at every status.
+ * An empty string clears it.
+ */
+export const setLeadRemark = async (
+  id: string,
+  remarks: string
+): Promise<LeadResponse> => {
+  const res = await api.patch<LeadResponse>(`/leads/${id}/remark`, { remarks });
+  return res.data;
+};
+
+/**
+ * PATCH /api/leads/{id}/follow-up
+ *
+ * Sets, moves or clears a lead's follow-up without touching its status.
+ * Follow-up used to be a status of its own, which meant a lead could only
+ * be chased between Contacted and Qualified; it is now a date the lead
+ * carries at any stage up to PI Raised. Pass null to clear it.
+ *
+ * The backend requires a remark whenever a date is set, so whoever makes
+ * the call knows what the last conversation was.
+ */
+export const setLeadFollowUp = async (
+  id: string,
+  nextFollowUpDate: string | null,
+  remark?: string
+): Promise<LeadResponse> => {
+  const res = await api.patch<LeadResponse>(`/leads/${id}/follow-up`, {
+    nextFollowUpDate,
+    remark,
+  });
+  return res.data;
+};
+
+/**
+ * Push a lead's follow-up to a new date — the "call me on the 18th" case.
+ * Uses the normal update endpoint; nothing else on the lead is touched.
+ */
+export const rescheduleFollowUp = async (
+  id: string,
+  nextFollowUpDate: string
+): Promise<LeadResponse> => {
+  const res = await api.patch<LeadResponse>(`/leads/update/${id}`, {
+    nextFollowUpDate,
+  });
   return res.data;
 };
 

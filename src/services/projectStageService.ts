@@ -54,6 +54,8 @@ export interface StageTrackerResponse {
   dueDate: string | null;
   status: StageTrackerStatus;
   accessLocked: boolean;
+  /** Engineer (Engineer stages) or Ops person (Ops stages) of the project. */
+  assignedUserEmail?: string | null;
   completedAt: string | null;
   completedByName: string | null;
   notes: string | null;
@@ -63,7 +65,39 @@ export interface StageTrackerResponse {
   // Free-form JSON string — used by the engineer-visit lifecycle to store
   // {"visitStatus": "SCHEDULED"|"COMPLETED"|"FAILED", "visitDate", "photoUrl", "notes"}.
   validationData: string | null;
+
+  // ── Stage notes ("why is this stuck?") ─────────────────────────────
+  remarkCount?: number;
+  latestRemark?: string | null;
+  latestRemarkBy?: string | null;
+  latestRemarkAt?: string | null;
+  // A late stage needs a note written on/after its due date before
+  // Mark Done. True once that note exists.
+  lateRemarkGiven?: boolean;
+  // "NEW" / "OLD" — which tab of the Projects page the project is in.
+  projectBatch?: "NEW" | "OLD";
 }
+
+/** Stage of an old project (from before the New/Old split). Manual tasks are never "old". */
+export const isOldProjectStage = (s: { projectBatch?: string | null; manual?: boolean }) =>
+  !s.manual && s.projectBatch === "OLD";
+
+export interface StageRemark {
+  id: string;
+  trackerId: string;
+  stageCode: string;
+  stageName: string | null;
+  text: string;
+  authorName: string | null;
+  authorEmail: string | null;
+  writtenWhileLate: boolean;
+  createdAt: string;
+}
+
+/** Late = flagged LATE, or the due date has already gone. */
+export const isStageLate = (s: StageTrackerResponse): boolean =>
+  s.status === "LATE" ||
+  (s.status !== "DONE" && s.daysLateOrRemaining !== null && s.daysLateOrRemaining < 0);
 
 export interface CompleteStageRequest {
   notes?: string;
@@ -90,10 +124,18 @@ export interface EngineerVisitFailRequest {
 
 // Parsed shape of a CLIENT_VISIT_ENG row's validationData JSON.
 export interface EngineerVisitState {
-  visitStatus: "SCHEDULED" | "COMPLETED" | "FAILED" | null;
+  // PENDING_APPROVAL: Ops / Engineer asked for a date, Admin hasn't approved yet.
+  // CANCELLED: Admin cancelled it — a new date can be requested.
+  visitStatus: "PENDING_APPROVAL" | "SCHEDULED" | "COMPLETED" | "FAILED" | "CANCELLED" | null;
   visitDate: string | null;
   photoUrl: string | null;
   notes: string | null;
+  requestedDate?: string | null;
+  requestedBy?: string | null;
+  requestedByEmail?: string | null;
+  approvedBy?: string | null;
+  cancelledBy?: string | null;
+  cancelledDate?: string | null;
 }
 
 export const parseEngineerVisitState = (validationData: string | null): EngineerVisitState => {
@@ -179,6 +221,28 @@ export const scheduleEngineerVisit = async (
   return res.data;
 };
 
+// ── Admin approval of factory visits ────────────────────────────────────
+export interface EngineerVisitApproveRequest {
+  /** Leave out to keep the requested date. */
+  visitDate?: string;
+  /** Leave out to keep the project's engineer. */
+  engineerEmail?: string;
+  note?: string;
+}
+
+export const approveEngineerVisit = async (
+  projectId: string,
+  req: EngineerVisitApproveRequest
+): Promise<StageTrackerResponse> =>
+  (await api.post<StageTrackerResponse>(`/admin/projects/${projectId}/stages/CLIENT_VISIT_ENG/approve`, req)).data;
+
+export const cancelEngineerVisit = async (projectId: string, reason: string): Promise<StageTrackerResponse> =>
+  (await api.post<StageTrackerResponse>(`/admin/projects/${projectId}/stages/CLIENT_VISIT_ENG/cancel`, { reason })).data;
+
+/** Admin: factory visits waiting for approval. */
+export const fetchVisitApprovals = async (): Promise<StageTrackerResponse[]> =>
+  (await api.get<StageTrackerResponse[]>("/admin/visit-approvals")).data;
+
 export const completeEngineerVisit = async (
   projectId: string,
   req: EngineerVisitCompleteRequest
@@ -250,6 +314,13 @@ export const fetchEngineerVisits = async (): Promise<StageTrackerResponse[]> => 
   return res.data;
 };
 
+// Read-only stage list for the Add Project dropdown — needs only PROJECTS
+// access, unlike the Admin config endpoint below.
+export const fetchStageDefinitionsForProjects = async (): Promise<ProjectStageDefinition[]> => {
+  const res = await api.get<ProjectStageDefinition[]>("/projects/stage-definitions");
+  return res.data;
+};
+
 // ── Admin: stage-definition config (day offsets, department, order) ──
 export const fetchStageDefinitions = async (): Promise<ProjectStageDefinition[]> => {
   const res = await api.get<ProjectStageDefinition[]>("/admin/stage-definitions");
@@ -263,3 +334,23 @@ export const updateStageDefinition = async (
   const res = await api.put<ProjectStageDefinition>(`/admin/stage-definitions/${id}`, update);
   return res.data;
 };
+
+// ── Stage notes ─────────────────────────────────────────────────────────
+// Every note on one project, newest first (group by stageCode on screen).
+export const fetchProjectRemarks = async (projectId: string): Promise<StageRemark[]> => {
+  const res = await api.get<StageRemark[]>(`/projects/${projectId}/stages/remarks`);
+  return res.data;
+};
+
+export const addStageRemark = async (
+  projectId: string,
+  stageCode: string,
+  text: string
+): Promise<StageRemark> => {
+  const res = await api.post<StageRemark>(`/projects/${projectId}/stages/${stageCode}/remarks`, { text });
+  return res.data;
+};
+
+/** True when this stage is late and nobody has explained the delay yet. */
+export const needsLateRemark = (s: StageTrackerResponse): boolean =>
+  isStageLate(s) && !s.lateRemarkGiven;

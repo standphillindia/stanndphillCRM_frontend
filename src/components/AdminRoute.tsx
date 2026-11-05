@@ -17,6 +17,8 @@ import { useAuth } from "../context/AuthContext";
 import { getRoleFromToken } from "../utils/jwt";
 import { useToast } from "../context/ToastContext";
 import { useEffect, useRef } from "react";
+import { usePermissions } from "../hooks/usePermissions";
+import { ADMIN_PANEL_MODULES } from "../constants/permissionConstants";
 
 interface Props {
   children: React.ReactNode;
@@ -27,16 +29,21 @@ export default function AdminRoute({ children }: Props) {
   const { addToast } = useToast();
   const warnedRef = useRef(false);
 
-  const isAdmin = getRoleFromToken(token) === "ADMIN";
+  // Admin, or a role given any Admin Panel screen in Roles & Permissions
+  // (each tab then shows only what that role was given).
+  const perms = usePermissions();
+  const isAdminRole = getRoleFromToken(token) === "ADMIN";
+  const isAdmin = isAdminRole || ADMIN_PANEL_MODULES.some((m) => perms.can(m));
+  const deciding = !isAdminRole && !perms.ready;
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated && !isAdmin && !warnedRef.current) {
+    if (!isLoading && !deciding && isAuthenticated && !isAdmin && !warnedRef.current) {
       warnedRef.current = true;
-      addToast({ title: "Access denied", message: "This page is Admin-only.", type: "error" });
+      addToast({ title: "Access denied", message: "Your role doesn't have access to the Admin Panel.", type: "error" });
     }
-  }, [isLoading, isAuthenticated, isAdmin, addToast]);
+  }, [isLoading, deciding, isAuthenticated, isAdmin, addToast]);
 
-  if (isLoading) {
+  if (isLoading || deciding) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="text-center">

@@ -58,7 +58,7 @@ export default function AmcList() {
   if (loading) return <div className="p-6">Loading...</div>;
 
   return (
-    <div className="p-2 sm:p-6 bg-gray-50 min-h-screen">
+    <div className="p-0 lg:p-6 bg-gray-50 min-h-screen">
       {/* Header */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -80,7 +80,7 @@ export default function AmcList() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-6 mb-6">
+      <div className="bg-white rounded-lg shadow p-4 lg:p-6 mb-4 lg:mb-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
@@ -129,7 +129,39 @@ export default function AmcList() {
             <p>No AMCs found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Phone / tablet: one card per AMC. The table is for laptops. */}
+          <div className="lg:hidden divide-y divide-gray-200">
+            {filteredAmcs.map((amc) => (
+              <div key={amc.id} className="p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-bold text-gray-900">{amc.amcCode}</span>
+                  <span className={`shrink-0 px-2 py-0.5 rounded-full text-[11px] font-medium ${amc.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : amc.status === 'CLOSED' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-700'}`}>
+                    {amc.status}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-700 break-words">{amc.clientName}</p>
+                {amc.certificationType && <p className="text-xs text-gray-500">{amc.certificationType}</p>}
+                <div className="mt-2 grid grid-cols-3 gap-1.5 text-xs">
+                  <div className="rounded-lg bg-gray-50 px-2 py-1.5"><span className="block text-gray-500">Contract</span><b className="text-gray-900">{formatCurrency(amc.contractValue)}</b></div>
+                  <div className="rounded-lg bg-gray-50 px-2 py-1.5"><span className="block text-gray-500">Received</span><b className="text-green-700">{formatCurrency(amc.received)}</b></div>
+                  <div className="rounded-lg bg-gray-50 px-2 py-1.5"><span className="block text-gray-500">Pending</span><b className="text-orange-600">{formatCurrency(amc.pending)}</b></div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+                  {amc.overdue > 0 && <span className="text-red-600 font-semibold">Overdue {formatCurrency(amc.overdue)}</span>}
+                  <span>Next due {amc.nextDueDate ? formatDate(amc.nextDueDate) : '—'}</span>
+                  <span>Renewal {amc.renewalDate ? formatDate(amc.renewalDate) : '—'}</span>
+                </div>
+                <button
+                  onClick={() => navigate(`/amc/details/${amc.id}`)}
+                  className="mt-3 w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-blue-600"
+                >
+                  View AMC
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
@@ -188,6 +220,7 @@ export default function AmcList() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>

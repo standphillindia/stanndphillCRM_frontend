@@ -22,6 +22,11 @@ export type LeadStatus = (typeof LEAD_STATUSES)[number]["value"];
  * JUSTDIAL
  * META_ADS
  * INSTAMART
+ * REFERENCE_ABHISHEK_SIR
+ * REFERENCE_MAYANK_SIR
+ * GOOGLE_ADS
+ * SOCIAL_MEDIA_ORGANIC
+ * EMAIL
  */
 export const LEAD_SOURCES = [
   {
@@ -47,6 +52,26 @@ export const LEAD_SOURCES = [
   {
     value: "INSTAMART",
     label: "Instamart",
+  },
+  {
+    value: "REFERENCE_ABHISHEK_SIR",
+    label: "Reference by Abhishek Sir",
+  },
+  {
+    value: "REFERENCE_MAYANK_SIR",
+    label: "Reference by Mayank Sir",
+  },
+  {
+    value: "GOOGLE_ADS",
+    label: "Google Ads",
+  },
+  {
+    value: "SOCIAL_MEDIA_ORGANIC",
+    label: "Social Media Organic",
+  },
+  {
+    value: "EMAIL",
+    label: "Email",
   },
 ] as const;
 

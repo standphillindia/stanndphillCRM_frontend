@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, FileText, Receipt } from "lucide-react";
+import { Search, FileText, Receipt, Pencil } from "lucide-react";
 import { fetchProjectsForPayments, type ProjectResponse } from "../../../services/projectService";
 import {
   getProjectInvoiceSummary,
@@ -19,6 +19,13 @@ import {
   getInvoiceDetailsById,
 } from "../../../services/invoiceService";
 import AmcInvoicePreviewModal from "../../../components/invoice/AmcInvoicePreviewModal";
+import QuotationLookupModal from "../../../components/quotation/QuotationLookupModal";
+import {
+  getAllQuotations,
+  type QuotationResponse,
+} from "../../../services/quotationService";
+import ClampText from "../../../components/common/ClampText";
+import EditContractModal from "../components/EditContractModal";
 
 const STAGE_STYLES: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-700",
@@ -42,6 +49,15 @@ export default function ProjectPaymentsList() {
   const [searching, setSearching] = useState(false);
 
   const [previewInvoice, setPreviewInvoice] = useState<InvoiceDetailsResponse | null>(null);
+
+  // Quotations hang off the originating Lead, not the Project — a project
+  // created from a won lead carries that lead's id, which is what lets
+  // Accounts trace a live project back to the paperwork that started it.
+  // Fetched once for the page and grouped, rather than per row.
+  const [quotationsByLead, setQuotationsByLead] = useState<Record<string, number>>({});
+  const [lookupProject, setLookupProject] = useState<ProjectResponse | null>(null);
+  // Contract amount being set by hand (pencil next to Contract).
+  const [editingContract, setEditingContract] = useState<ProjectResponse | null>(null);
 
   useEffect(() => {
     loadProjects();
@@ -72,6 +88,19 @@ export default function ProjectPaymentsList() {
         if (summary) map[id] = summary;
       });
       setSummaries(map);
+
+      // Swallowed on failure by design: the icon is a convenience, and
+      // losing it should never take the payments page down with it.
+      try {
+        const quotations: QuotationResponse[] = await getAllQuotations();
+        const counts: Record<string, number> = {};
+        quotations.forEach((q) => {
+          if (q.leadId) counts[q.leadId] = (counts[q.leadId] ?? 0) + 1;
+        });
+        setQuotationsByLead(counts);
+      } catch {
+        setQuotationsByLead({});
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load projects");
     } finally {
@@ -122,7 +151,7 @@ export default function ProjectPaymentsList() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-0 lg:p-6 space-y-4 lg:space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
         <p className="text-gray-600 mt-1">PI/TI issued against Projects — Received/Pending live-tracked per project</p>
@@ -137,8 +166,8 @@ export default function ProjectPaymentsList() {
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Find any PI / TI (search by client name or invoice number)
         </label>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap gap-2">
+          <div className="relative flex-1 min-w-full sm:min-w-0">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               value={query}
@@ -195,7 +224,47 @@ export default function ProjectPaymentsList() {
         {projects.length === 0 ? (
           <div className="p-8 text-center text-gray-500">No projects found.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Phone / tablet: one card per project. The table is for laptops. */}
+          <div className="lg:hidden divide-y divide-gray-200">
+            {projects.map((p) => {
+              const summary = summaries[p.id];
+              return (
+                <div key={p.id} className="p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <ClampText text={p.projectName} className="font-bold text-gray-900" />
+                    {p.certificationType && (
+                      <span className="shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">{p.certificationType}</span>
+                    )}
+                  </div>
+                  <span className={`mt-1 inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${STAGE_STYLES[p.stage] || "bg-blue-100 text-blue-800"}`}>
+                    {p.stage}
+                  </span>
+                  <div className="mt-2 grid grid-cols-3 gap-1.5 text-xs">
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setEditingContract(p); }} className="text-left rounded-lg bg-gray-50 px-2 py-1.5"><span className="flex items-center gap-1 text-gray-500">Contract <Pencil size={11} className="text-indigo-600" /></span><b className="text-gray-900">{formatCurrency(p.amount)}</b></button>
+                      <div className="rounded-lg bg-gray-50 px-2 py-1.5"><span className="block text-gray-500">Received</span><b className="text-green-700">{formatCurrency(p.receivedAmount)}</b></div>
+                      <div className="rounded-lg bg-gray-50 px-2 py-1.5"><span className="block text-gray-500">Pending</span><b className="text-orange-700">{formatCurrency(p.pendingAmount)}</b></div>
+                    </div>
+                  <div className="mt-2 flex items-center gap-4 text-xs">
+                    <span className="inline-flex items-center gap-1 text-orange-700"><FileText size={13} /> PI {summary?.totalProforma ?? 0}</span>
+                    <span className="inline-flex items-center gap-1 text-blue-700"><Receipt size={13} /> TI {summary?.totalTax ?? 0}</span>
+                    {p.leadId && quotationsByLead[p.leadId] ? (
+                      <button onClick={() => setLookupProject(p)} className="ml-auto font-semibold text-indigo-700">
+                        Quotation{quotationsByLead[p.leadId] > 1 ? ` (${quotationsByLead[p.leadId]})` : ""}
+                      </button>
+                    ) : null}
+                  </div>
+                  <button
+                    onClick={() => navigate(`/payments/project/${p.id}`)}
+                    className="mt-3 w-full py-2.5 rounded-xl text-sm font-semibold text-white bg-blue-600"
+                  >
+                    View PI / TI
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
@@ -207,6 +276,7 @@ export default function ProjectPaymentsList() {
                   <th className="px-6 py-3 text-right font-semibold text-gray-700">Pending</th>
                   <th className="px-6 py-3 text-center font-semibold text-gray-700">PI</th>
                   <th className="px-6 py-3 text-center font-semibold text-gray-700">TI</th>
+                  <th className="px-6 py-3 text-center font-semibold text-gray-700">Quotation</th>
                   <th className="px-6 py-3 text-center font-semibold text-gray-700">Action</th>
                 </tr>
               </thead>
@@ -215,14 +285,26 @@ export default function ProjectPaymentsList() {
                   const summary = summaries[p.id];
                   return (
                     <tr key={p.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-medium text-gray-900">{p.projectName}</td>
+                      <td className="px-6 py-4 font-medium text-gray-900 min-w-[200px] max-w-[320px]">
+                        <ClampText text={p.projectName} />
+                      </td>
                       <td className="px-6 py-4 text-gray-700">{p.certificationType || "—"}</td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${STAGE_STYLES[p.stage] || "bg-blue-100 text-blue-800"}`}>
                           {p.stage}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-right text-gray-900">{formatCurrency(p.amount)}</td>
+                      <td className="px-6 py-4 text-right text-gray-900 whitespace-nowrap">
+                        {formatCurrency(p.amount)}
+                        <button
+                          type="button"
+                          title="Edit contract amount"
+                          onClick={(e) => { e.stopPropagation(); setEditingContract(p); }}
+                          className="ml-1.5 p-1 rounded text-gray-400 hover:text-indigo-700 hover:bg-indigo-50 align-middle"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      </td>
                       <td className="px-6 py-4 text-right text-green-700 font-medium">{formatCurrency(p.receivedAmount)}</td>
                       <td className="px-6 py-4 text-right text-orange-700 font-medium">{formatCurrency(p.pendingAmount)}</td>
                       <td className="px-6 py-4 text-center">
@@ -234,6 +316,22 @@ export default function ProjectPaymentsList() {
                         <span className="inline-flex items-center gap-1 text-blue-700">
                           <Receipt size={14} /> {summary?.totalTax ?? 0}
                         </span>
+                      </td>
+                      {/* Traced through the originating lead. Projects created
+                          manually have no lead, so no quotation to show. */}
+                      <td className="px-6 py-4 text-center">
+                        {p.leadId && quotationsByLead[p.leadId] ? (
+                          <button
+                            onClick={() => setLookupProject(p)}
+                            title="View the quotation this project came from"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-semibold hover:bg-indigo-100"
+                          >
+                            <FileText size={14} />
+                            {quotationsByLead[p.leadId] > 1 ? quotationsByLead[p.leadId] : "View"}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-center">
                         <button
@@ -249,14 +347,34 @@ export default function ProjectPaymentsList() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
+
+      <QuotationLookupModal
+        isOpen={lookupProject !== null}
+        leadId={lookupProject?.leadId}
+        clientLabel={lookupProject?.projectName}
+        onClose={() => setLookupProject(null)}
+      />
 
       {previewInvoice && (
         <AmcInvoicePreviewModal
           invoice={previewInvoice}
           onClose={() => setPreviewInvoice(null)}
           onUpdated={(updated) => setPreviewInvoice(updated)}
+        />
+      )}
+      {editingContract && (
+        <EditContractModal
+          projectId={editingContract.id}
+          projectName={editingContract.projectName}
+          currentAmount={editingContract.amount}
+          onClose={() => setEditingContract(null)}
+          onSaved={() => {
+            setEditingContract(null);
+            loadProjects();
+          }}
         />
       )}
     </div>

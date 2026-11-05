@@ -34,6 +34,11 @@ export interface PaymentTransactionResponse {
   paidBy: string;
   paymentMode: string;
   referenceNo: string;
+  // Nov 2026 — who entered / last corrected it (empty on older entries)
+  recordedByName?: string | null;
+  recordedAt?: string | null;
+  editedByName?: string | null;
+  editedAt?: string | null;
 }
 
 export interface AddPaymentTransactionRequest {
@@ -251,6 +256,26 @@ export async function addPaymentTransaction(
     console.error("❌ Error adding transaction:", error);
     throw error;
   }
+}
+
+/**
+ * Correct a recorded payment (amount / date / mode / reference / paid by).
+ * The PI's received & balance and the project's totals update on the server.
+ */
+export async function updatePaymentTransaction(
+  transactionId: string,
+  request: AddPaymentTransactionRequest
+): Promise<PaymentTransactionResponse> {
+  const response = await api.patch<PaymentTransactionResponse>(
+    `/payments/transactions/${transactionId}`,
+    request
+  );
+  return response.data;
+}
+
+/** Remove a recorded payment entered by mistake — Admin only. */
+export async function deletePaymentTransaction(transactionId: string): Promise<void> {
+  await api.delete(`/payments/transactions/${transactionId}`);
 }
 
 /**

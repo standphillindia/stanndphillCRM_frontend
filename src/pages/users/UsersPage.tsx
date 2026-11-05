@@ -39,6 +39,9 @@ const ROLE_TO_DEPARTMENT: Record<UserRole, string> = {
   SALES:      "Sales",
   FINANCE:    "Finance",
   OPERATIONS: "Operations",
+  HR:         "HR",
+  MARKETING:  "Marketing",
+  DEVELOPER:  "Developer",
 };
 
 // ── Role badge config 
@@ -52,6 +55,9 @@ const ROLE_CONFIG: Record<
   SALES:      { bg: "bg-amber-500/10",  text: "text-amber-700",   border: "border-amber-500/20",   label: "Sales" },
   FINANCE:    { bg: "bg-indigo-500/10", text: "text-indigo-700",  border: "border-indigo-500/20",  label: "Finance" },
   OPERATIONS: { bg: "bg-green-500/10",  text: "text-green-700",   border: "border-green-500/20",   label: "Operations" },
+  HR:         { bg: "bg-rose-500/10",   text: "text-rose-700",    border: "border-rose-500/20",    label: "HR" },
+  MARKETING:  { bg: "bg-sky-500/10",    text: "text-sky-700",     border: "border-sky-500/20",     label: "Marketing" },
+  DEVELOPER:  { bg: "bg-slate-500/10",  text: "text-slate-700",   border: "border-slate-500/20",   label: "Developer" },
 };
 
 const STATUS_CONFIG: Record<
@@ -309,9 +315,29 @@ export default function UsersPage() {
     }
   };
 
-  // ── Status toggle ──────────────────────────────────────────────────────────
+  // Active / Inactive now follows login (see userService.mapBackendUser),
+  // so it refreshes itself every minute while this page is open.
+  useEffect(() => {
+    const t = setInterval(async () => {
+      try {
+        const data = await fetchUsers({
+          search: search || undefined,
+          role: roleFilter,
+          status: statusFilter,
+        });
+        setUsers(data);
+      } catch {
+        /* keep the current list; the next tick will try again */
+      }
+    }, 60_000);
+    return () => clearInterval(t);
+  }, [search, roleFilter, statusFilter]);
+
+  // ── Approve (INVITED → can log in) ─────────────────────────────────────────
   const handleStatusToggle = async (user: UserResponse) => {
-    const next: UserStatus = user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    if (user.status !== "INVITED") return; // Active/Inactive comes from login now
+    if (!window.confirm(`Approve ${user.fullName}? They will be able to log in.`)) return;
+    const next: UserStatus = "ACTIVE";
     setStatusLoading(user.id);
     try {
       await toggleUserStatus(user.id, next);
@@ -353,7 +379,7 @@ export default function UsersPage() {
       </div>
 
       {/* ── Tabs ───────────────────────────────────────────────────────────── */}
-      <div className="flex gap-1 border-b border-outline-variant/20">
+      <div className="flex gap-1 border-b border-outline-variant/20 overflow-x-auto">
         {[
           { key: "members" as const,     label: "Team Members",      icon: "group" },
           { key: "permissions" as const, label: "Roles & Permissions", icon: "admin_panel_settings" },
@@ -361,7 +387,7 @@ export default function UsersPage() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 px-4 py-3 text-body-sm font-semibold border-b-2 -mb-px transition-colors
+            className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-3 lg:px-4 py-3 text-body-sm font-semibold border-b-2 -mb-px transition-colors
               ${activeTab === tab.key
                 ? "border-primary text-primary"
                 : "border-transparent text-secondary hover:text-on-surface"
@@ -464,8 +490,57 @@ export default function UsersPage() {
         </div>
       )}
 
+      {/* ── Phone: one card per user (the table below is for laptops) ───────── */}
+      <div className="lg:hidden space-y-2.5">
+        {loading ? (
+          <div className="glass-card rounded-xl p-6 text-center text-body-sm text-secondary">Loading…</div>
+        ) : users.length === 0 ? (
+          <div className="glass-card rounded-xl p-6 text-center text-body-sm text-secondary">No users found.</div>
+        ) : (
+          users.map((user) => {
+            const roleCfg = ROLE_CONFIG[user.role];
+            const statusCfg = STATUS_CONFIG[user.status];
+            return (
+              <div key={user.id} className="glass-card rounded-xl p-4 shadow-sm">
+                <button onClick={() => setProfileUser(user)} className="w-full text-left flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-bold shrink-0 ${avatarColor(user.fullName)}`}>
+                    {initials(user.fullName || "?")}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-on-surface leading-tight break-words">{user.fullName}</p>
+                    <p className="text-[12px] text-secondary break-all">{user.email}</p>
+                  </div>
+                </button>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
+                  <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border uppercase ${roleCfg.bg} ${roleCfg.text} ${roleCfg.border}`}>
+                    {roleCfg.label}
+                  </span>
+                  <button
+                    onClick={() => { if (user.status === "INVITED") handleStatusToggle(user); }}
+                    className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border uppercase ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}
+                  >
+                    {statusLoading === user.id ? "Updating…" : user.status === "INVITED" ? `${statusCfg.label} · tap to approve` : statusCfg.label}
+                  </button>
+                  {user.team && <span className="text-secondary">{user.team}</span>}
+                </div>
+                <p className="mt-1 text-[11px] text-outline">
+                  Last login: {user.lastLoginAt
+                    ? new Date(user.lastLoginAt).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })
+                    : "Never"}
+                </p>
+                <div className="mt-3 grid grid-cols-3 gap-1.5 text-[12px] font-semibold">
+                  <button onClick={() => openEdit(user)} className="py-2 rounded-lg bg-primary/10 text-primary">Edit</button>
+                  <button onClick={() => setResetPasswordUser(user)} className="py-2 rounded-lg bg-surface-container-low text-on-surface">Reset password</button>
+                  <button onClick={() => { setDeleteId(user.id); setDeleteError(null); }} className="py-2 rounded-lg bg-red-50 text-red-700">Delete</button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
       {/* ── Data table ─────────────────────────────────────────────────────── */}
-      <div className="glass-card rounded-xl overflow-hidden shadow-sm">
+      <div className="hidden lg:block glass-card rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -508,8 +583,15 @@ export default function UsersPage() {
                   const av  = avatarColor(user.fullName);
                   const ini = initials(user.fullName || "?");
                   const lastLogin = user.lastLoginAt
-                    ? new Date(user.lastLoginAt).toLocaleDateString("en-IN")
+                    ? new Date(user.lastLoginAt).toLocaleString("en-IN", {
+                        day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+                      })
                     : "Never";
+                  const lastSeen = user.lastSeenAt
+                    ? new Date(user.lastSeenAt).toLocaleString("en-IN", {
+                        day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+                      })
+                    : null;
                   const roleCfg = ROLE_CONFIG[user.role];
                   const statusCfg = STATUS_CONFIG[user.status];
 
@@ -554,20 +636,29 @@ export default function UsersPage() {
                         {user.team || "—"}
                       </td>
 
-                      {/* Status (click to toggle Active/Inactive) */}
+                      {/* Status — Active while logged in, Inactive after sign
+                          out / 9 hours; Invited = not approved yet (click to approve) */}
                       <td className="px-6 py-4">
                         {statusLoading === user.id ? (
                           <span className="text-body-sm text-secondary animate-pulse">Updating…</span>
                         ) : (
                           <button
-                            onClick={(e) => { e.stopPropagation(); if (user.status !== "INVITED") handleStatusToggle(user); }}
-                            disabled={user.status === "INVITED"}
-                            title={user.status === "INVITED" ? "Pending invite acceptance" : "Click to toggle status"}
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold
+                            onClick={(e) => { e.stopPropagation(); if (user.status === "INVITED") handleStatusToggle(user); }}
+                            title={
+                              user.status === "INVITED"
+                                ? "Not approved yet — click to approve"
+                                : user.status === "ACTIVE"
+                                ? "Logged in now"
+                                : lastSeen ? `Not logged in · last seen ${lastSeen}` : "Not logged in"
+                            }
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold
                               border uppercase tracking-tight transition-all
                               ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}
-                              ${user.status === "INVITED" ? "cursor-default" : "cursor-pointer hover:opacity-70"}`}
+                              ${user.status === "INVITED" ? "cursor-pointer hover:opacity-70" : "cursor-default"}`}
                           >
+                            {user.status === "ACTIVE" && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            )}
                             {statusCfg.label}
                           </button>
                         )}
@@ -618,9 +709,9 @@ export default function UsersPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Total Users", value: stats.total,    sub: "All members",   color: "text-primary"     },
-          { label: "Active",      value: stats.active,   sub: "Currently on",  color: "text-emerald-700" },
+          { label: "Active",      value: stats.active,   sub: "Logged in now", color: "text-emerald-700" },
           { label: "Invited",     value: stats.invited,  sub: "Pending",       color: "text-tertiary"    },
-          { label: "Inactive",    value: stats.inactive, sub: "Disabled",      color: "text-error"       },
+          { label: "Inactive",    value: stats.inactive, sub: "Logged out",    color: "text-error"       },
         ].map((stat) => (
           <div key={stat.label} className="glass-card rounded-xl p-4">
             <p className="text-label-caps text-outline uppercase mb-1">{stat.label}</p>
