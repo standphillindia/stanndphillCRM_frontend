@@ -26,7 +26,7 @@ import {
   type CreateLeadRequest,
   type LeadFilterParams,
 } from "../../services/leadService";
-import { fetchUsers, type UserResponse as OrgUserResponse } from "../../services/userService";
+import { fetchUsers, fetchUserDirectory, type UserResponse as OrgUserResponse } from "../../services/userService";
 import { useToastNotification } from "../../hooks/useToastNotification";
 import { getApiErrorMessage, getApiErrorTitle } from "../../utils/apiError";
 import { fetchDepartments, type DepartmentResponse } from "../../services/orgService";
@@ -295,7 +295,12 @@ export default function LeadsPage() {
     // typically picks someone from Operations.
     fetchUsers({}).then(setOpsUsers).catch(() => setOpsUsers([]));
     fetchDepartments().then(setDepartments).catch(() => setDepartments([]));
-    fetchUsers({ role: "SALES" }).then(setSalesUsers).catch(() => setSalesUsers([]));
+    // From the user directory (open to every logged-in user), so Sales and
+    // Marketing — who have no Users access — also get the list for
+    // "Assign To" / "Reassign To".
+    fetchUserDirectory()
+      .then((all) => setSalesUsers(all.filter((u) => u.role === "SALES" && u.status === "ACTIVE")))
+      .catch(() => setSalesUsers([]));
   }, []);
 
   // Leads only carry the assignee's email. Resolve it to a name for display;
@@ -429,6 +434,12 @@ export default function LeadsPage() {
   const perms     = usePermissions();
   const isAdmin   = myRole === "ADMIN" || perms.can("LEADS_ALL");
   const canReassign = myRole === "ADMIN" || perms.can("LEADS_ALL", "EDIT");
+  // A new manual lead: Sales keep it by default, everyone else (Marketing,
+  // Admin…) sends it into the round-robin. Either can be changed in the form.
+  const newLeadForm = (): CreateLeadRequest =>
+    isSales && !isAdmin && myEmail
+      ? { ...EMPTY_FORM, assignedToEmail: myEmail, roundRobin: false }
+      : { ...EMPTY_FORM, assignedToEmail: undefined, roundRobin: true };
 
   // ── Load ───────────────────────────────────────────────────────────────────
   // The filters on screen, as API params — shared by the table and the
@@ -619,7 +630,7 @@ export default function LeadsPage() {
     setAddLoading(true); setAddError(null);
     try {
       const created = await createLead(addForm);
-      setShowAdd(false); setAddForm(EMPTY_FORM); loadLeads(0);
+      setShowAdd(false); setAddForm(newLeadForm()); loadLeads(0);
 
       if (created.alreadyExisted) {
         // Same number came in within 24 hours: no new lead was made, the
@@ -939,7 +950,7 @@ export default function LeadsPage() {
             New Quotation
           </button>
           <button
-            onClick={() => { setAddForm(EMPTY_FORM); setAddError(null); setShowAdd(true); }}
+            onClick={() => { setAddForm(newLeadForm()); setAddError(null); setShowAdd(true); }}
             className="flex items-center gap-2 px-4 py-2.5 bg-primary text-on-primary
               rounded-lg text-body-md font-semibold shadow-sm
               hover:opacity-90 active:scale-95 transition-all"
@@ -1288,7 +1299,7 @@ export default function LeadsPage() {
       {/* New lead — floating button on a phone, above the bottom menu. */}
       <button
         type="button"
-        onClick={() => { setAddForm(EMPTY_FORM); setAddError(null); setShowAdd(true); }}
+        onClick={() => { setAddForm(newLeadForm()); setAddError(null); setShowAdd(true); }}
         className="lg:hidden fixed right-4 bottom-24 z-30 w-14 h-14 rounded-2xl bg-primary text-on-primary text-3xl leading-none shadow-lg"
         aria-label="Add lead"
       >
@@ -1791,31 +1802,40 @@ export default function LeadsPage() {
                   className={inputCls}
                 />
               </Field>
-              {/* Ownership of a manually added lead (backend enforces the same rule):
-                  - Admin: pick a salesperson, or leave on round-robin.
-                  - Everyone else: the lead is theirs.
-                  Website enquiries are always round-robin. */}
-              {isAdmin ? (
-                <Field label="Assign To" icon="manage_accounts">
-                  <select
-                    value={addForm.assignedToEmail ?? ""}
-                    onChange={(e) => setAddForm((prev) => ({ ...prev, assignedToEmail: e.target.value || undefined }))}
-                    className={inputCls}
-                  >
-                    <option value="">Auto (round-robin)</option>
-                    {salesUsers.map((u) => (
-                      <option key={u.id} value={u.email}>{u.fullName} ({u.email})</option>
-                    ))}
-                  </select>
-                </Field>
-              ) : (
-                <Field label="Assigned To" icon="manage_accounts">
-                  <div className={`${inputCls} flex items-center gap-2 text-on-surface-variant bg-surface-variant/40 cursor-not-allowed`}>
-                    <span className="material-symbols-outlined text-[16px] text-primary">person</span>
-                    <span className="text-body-sm truncate">You{myEmail ? ` (${myEmail})` : ""}</span>
-                  </div>
-                </Field>
-              )}
+              {/* Who gets this manually added lead (backend enforces the same rule):
+                  - Round robin: the next Sales person in the rotation
+                    (same rotation as website enquiries).
+                  - A Sales person by name, or yourself.
+                  Admin / "All leads" can pick anyone; website enquiries
+                  are always round-robin. */}
+              <Field label="Assign To" icon="manage_accounts">
+                <select
+                  value={addForm.roundRobin || !addForm.assignedToEmail ? "__RR__" : addForm.assignedToEmail}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setAddForm((prev) =>
+                      v === "__RR__"
+                        ? { ...prev, roundRobin: true, assignedToEmail: undefined }
+                        : { ...prev, roundRobin: false, assignedToEmail: v });
+                  }}
+                  className={inputCls}
+                >
+                  <option value="__RR__">🔄 Round robin (next Sales person)</option>
+                  {myEmail && !salesUsers.some((u) => u.email.toLowerCase() === myEmail.toLowerCase()) && (
+                    <option value={myEmail}>Myself ({myEmail})</option>
+                  )}
+                  {salesUsers.map((u) => (
+                    <option key={u.id} value={u.email}>
+                      {u.fullName}{u.email.toLowerCase() === myEmail.toLowerCase() ? " (me)" : ""} — {u.email}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-on-surface-variant">
+                  {addForm.roundRobin || !addForm.assignedToEmail
+                    ? "The CRM picks the next Sales person in turn and notifies them."
+                    : "This person gets the lead and a notification."}
+                </p>
+              </Field>
             </div>
 
             {addError && (

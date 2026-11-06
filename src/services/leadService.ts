@@ -77,6 +77,8 @@ export interface CreateLeadRequest {
   sourcePage?: string;
   /** Day the enquiry was received (yyyy-MM-dd). Blank = today. */
   leadDate?: string;
+  /** Manual lead: give it to the next Sales person in the round-robin. */
+  roundRobin?: boolean;
 }
 
 export interface UpdateLeadRequest {
