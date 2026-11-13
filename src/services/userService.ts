@@ -43,6 +43,9 @@ export interface UserResponse {
   createdAt: string;
   lastLoginAt?: string | null;
   lastSeenAt?: string | null;   // last time the CRM was open in their browser
+  // Set while the account is deactivated (person left the company)
+  deactivatedAt?: string | null;
+  deactivatedByName?: string | null;
 }
 
 export interface CreateUserRequest {
@@ -182,6 +185,8 @@ interface BackendUserResponse {
   online?: boolean | null;
   lastLoginAt?: string | null;
   lastSeenAt?: string | null;
+  deactivatedAt?: string | null;
+  deactivatedByName?: string | null;
 }
 
 const mapBackendUser = (u: BackendUserResponse): UserResponse => ({
@@ -195,10 +200,13 @@ const mapBackendUser = (u: BackendUserResponse): UserResponse => ({
   // INVITED = account not approved yet. Approved accounts show ACTIVE
   // while the person is logged in and INACTIVE once they sign out, close
   // the CRM, or their 9-hour login runs out.
-  status: !u.active ? "INVITED" : u.online ? "ACTIVE" : "INACTIVE",
+  // DEACTIVATED = Admin turned the account off (left the company).
+  status: !u.active ? (u.deactivatedAt ? "DEACTIVATED" : "INVITED") : u.online ? "ACTIVE" : "INACTIVE",
   createdAt: u.createdAt,
   lastLoginAt: u.lastLoginAt ?? null,
   lastSeenAt: u.lastSeenAt ?? null,
+  deactivatedAt: u.deactivatedAt ?? null,
+  deactivatedByName: u.deactivatedByName ?? null,
 });
 
 const delay = (ms = 400) => new Promise((res) => setTimeout(res, ms));
@@ -381,6 +389,25 @@ export const resetUserPassword = async (
 // ─────────────────────────────────────────────────────────────
 // DELETE /api/users/{id}
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// PATCH /api/org/users/{id}/deactivate  →  person left the company
+// ─────────────────────────────────────────────────────────────
+// They can't log in (signed out everywhere at once) and get no new leads.
+// moveLeadsTo: "ROUND_ROBIN", someone's email, or undefined to leave their
+// open leads where they are.
+export const deactivateUser = async (id: string, moveLeadsTo?: string): Promise<UserResponse> => {
+  const res = await api.patch<BackendUserResponse>(`/org/users/${id}/deactivate`, {
+    moveLeadsTo: moveLeadsTo || null,
+  });
+  return mapBackendUser(res.data);
+};
+
+// Reactivate = the same "approve" call: active again, can log in.
+export const reactivateUser = async (id: string): Promise<UserResponse> => {
+  const res = await api.patch<BackendUserResponse>(`/org/users/${id}/approve`);
+  return mapBackendUser(res.data);
+};
+
 export const deleteUser = async (id: string): Promise<void> => {
   // Always hits the real backend — same pattern as createUser/toggleUserStatus.
   await api.delete(`/org/users/${id}`);

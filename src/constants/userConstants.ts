@@ -20,6 +20,8 @@ export const USER_STATUSES = [
   { value: "ACTIVE", label: "Active" },
   { value: "INACTIVE", label: "Inactive" },
   { value: "INVITED", label: "Invited" },
+  // Left the company — can't log in and gets no new leads (Nov 2026)
+  { value: "DEACTIVATED", label: "Deactivated" },
 ] as const;
 
 export type UserStatus = (typeof USER_STATUSES)[number]["value"];

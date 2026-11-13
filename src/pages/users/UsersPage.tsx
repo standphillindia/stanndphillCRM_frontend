@@ -12,6 +12,9 @@ import {
   deleteUser,
   toggleUserStatus,
   resetUserPassword,
+  deactivateUser,
+  reactivateUser,
+  fetchUserDirectory,
   type UserResponse,
   type CreateUserRequest,
 } from "../../services/userService";
@@ -67,6 +70,7 @@ const STATUS_CONFIG: Record<
   ACTIVE:   { bg: "bg-emerald-500/10", text: "text-emerald-700", border: "border-emerald-500/20", label: "Active" },
   INACTIVE: { bg: "bg-error/10",       text: "text-error",       border: "border-error/20",       label: "Inactive" },
   INVITED:  { bg: "bg-surface-container-highest/60", text: "text-secondary", border: "border-outline-variant/30", label: "Invited" },
+  DEACTIVATED: { bg: "bg-slate-500/10", text: "text-slate-600", border: "border-slate-500/30", label: "Deactivated" },
 };
 
 // ── Avatar helpers 
@@ -192,6 +196,12 @@ export default function UsersPage() {
   const [editError,   setEditError]   = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
 
+  // Deactivate (left the company) / Reactivate — inside the Edit modal
+  const [showDeactivate, setShowDeactivate] = useState(false);
+  const [moveLeadsTo,    setMoveLeadsTo]    = useState<string>("ROUND_ROBIN");
+  const [handoverUsers,  setHandoverUsers]  = useState<UserResponse[]>([]);
+  const [accessLoading,  setAccessLoading]  = useState(false);
+
   // Delete confirm
   const [deleteId,      setDeleteId]      = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -247,6 +257,8 @@ export default function UsersPage() {
   // ── Edit ───────────────────────────────────────────────────────────────────
   const openEdit = (user: UserResponse) => {
     setEditUser(user);
+    setShowDeactivate(false);
+    setMoveLeadsTo("ROUND_ROBIN");
     setEditForm({
       fullName: user.fullName,
       email: user.email,
@@ -269,6 +281,47 @@ export default function UsersPage() {
       const err = e as { message?: string };
       setEditError(err?.message ?? "Failed to update user.");
     } finally { setEditLoading(false); }
+  };
+
+  // ── Deactivate / Reactivate ────────────────────────────────────────────────
+  const openDeactivate = async () => {
+    setShowDeactivate(true);
+    setEditError(null);
+    try {
+      // Active people who can take over the open leads (Sales first).
+      const all = await fetchUserDirectory();
+      setHandoverUsers(
+        all
+          .filter((u) => u.status === "ACTIVE" && u.id !== editUser?.id)
+          .sort((a, b) => (a.role === "SALES" ? 0 : 1) - (b.role === "SALES" ? 0 : 1)),
+      );
+    } catch {
+      setHandoverUsers([]);
+    }
+  };
+
+  const handleDeactivate = async () => {
+    if (!editUser) return;
+    setAccessLoading(true); setEditError(null);
+    try {
+      await deactivateUser(editUser.id, moveLeadsTo === "KEEP" ? undefined : moveLeadsTo);
+      setEditUser(null); loadUsers();
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      setEditError(err?.message ?? "Failed to deactivate user.");
+    } finally { setAccessLoading(false); }
+  };
+
+  const handleReactivate = async () => {
+    if (!editUser) return;
+    setAccessLoading(true); setEditError(null);
+    try {
+      await reactivateUser(editUser.id);
+      setEditUser(null); loadUsers();
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      setEditError(err?.message ?? "Failed to reactivate user.");
+    } finally { setAccessLoading(false); }
   };
 
   // ── Delete ─────────────────────────────────────────────────────────────────
@@ -647,6 +700,8 @@ export default function UsersPage() {
                             title={
                               user.status === "INVITED"
                                 ? "Not approved yet — click to approve"
+                                : user.status === "DEACTIVATED"
+                                ? `Deactivated${user.deactivatedAt ? ` on ${new Date(user.deactivatedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : ""} — can't log in, gets no new leads`
                                 : user.status === "ACTIVE"
                                 ? "Logged in now"
                                 : lastSeen ? `Not logged in · last seen ${lastSeen}` : "Not logged in"
@@ -961,6 +1016,59 @@ export default function UsersPage() {
                 </p>
               </Field>
             </div>
+
+            {/* Account access — Deactivate someone who has left (no login, no
+                new leads; their history stays), or Reactivate them. */}
+            {editUser.status !== "INVITED" && (
+              <div className="rounded-lg border border-outline-variant/30 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-body-md font-semibold text-on-surface">Account access</p>
+                    <p className="text-[12px] text-secondary">
+                      {editUser.status === "DEACTIVATED"
+                        ? `Deactivated${editUser.deactivatedAt ? ` on ${new Date(editUser.deactivatedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : ""}${editUser.deactivatedByName ? ` by ${editUser.deactivatedByName}` : ""}. Can't log in and gets no new leads.`
+                        : "Active. Deactivate when this person leaves — they can't log in and get no new leads, but their history stays."}
+                    </p>
+                  </div>
+                  {editUser.status === "DEACTIVATED" ? (
+                    <button type="button" onClick={handleReactivate} disabled={accessLoading}
+                      className="px-3 py-2 rounded-lg text-body-sm font-semibold bg-emerald-600 text-white hover:opacity-90 disabled:opacity-60">
+                      {accessLoading ? "Reactivating…" : "Reactivate"}
+                    </button>
+                  ) : !showDeactivate && (
+                    <button type="button" onClick={openDeactivate}
+                      className="px-3 py-2 rounded-lg text-body-sm font-semibold border border-error/40 text-error hover:bg-error/10">
+                      Deactivate user
+                    </button>
+                  )}
+                </div>
+
+                {showDeactivate && editUser.status !== "DEACTIVATED" && (
+                  <div className="rounded-lg bg-error-container/20 border border-error/20 p-3 space-y-2.5">
+                    <label className="block text-[12px] font-semibold text-on-surface">
+                      Their open leads (not Won / Lost) should go to
+                    </label>
+                    <select value={moveLeadsTo} onChange={(e) => setMoveLeadsTo(e.target.value)} className={inputCls}>
+                      <option value="ROUND_ROBIN">🔄 Round robin — share among the active Sales team</option>
+                      {handoverUsers.map((u) => (
+                        <option key={u.id} value={u.email}>{u.fullName} ({u.role}) — {u.email}</option>
+                      ))}
+                      <option value="KEEP">Keep them with {editUser.fullName} (move later)</option>
+                    </select>
+                    <div className="flex justify-end gap-2">
+                      <button type="button" onClick={() => setShowDeactivate(false)} disabled={accessLoading}
+                        className="px-3 py-2 rounded-lg text-body-sm border border-outline-variant hover:bg-surface-variant disabled:opacity-60">
+                        Cancel
+                      </button>
+                      <button type="button" onClick={handleDeactivate} disabled={accessLoading}
+                        className="px-3 py-2 rounded-lg text-body-sm font-semibold bg-error text-on-error hover:opacity-90 disabled:opacity-60">
+                        {accessLoading ? "Deactivating…" : `Deactivate ${editUser.fullName}`}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {editError && (
               <div className="flex items-center gap-2 px-4 py-3 bg-error-container/40
